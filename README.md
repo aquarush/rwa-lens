@@ -32,7 +32,7 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 - [Demo walkthrough (5 minutes)](#demo-walkthrough-5-minutes)
 - [CoinMarketCap endpoints used](#coinmarketcap-endpoints-used)
 - [The trading agent](#the-trading-agent)
-- [MCP server (optional)](#mcp-server-optional)
+- [Connect AI agents (MCP)](#connect-ai-agents-mcp)
 - [Configuration](#configuration)
 - [Project structure](#project-structure)
 - [Deploying (Cloudflare Pages or Node)](#deploying)
@@ -218,18 +218,56 @@ Each run:
 | **Human in the loop** | Autopilot is **off** by default. The agent proposes, you approve, and approved orders are re-validated at the current price |
 | **Transparency** | Each run's journal shows the regime, the filter counts, every hold/skip/buy/sell reason with the numbers behind it, and equity before and after |
 
-## MCP server (optional)
+## Connect AI agents (MCP)
 
-RWA Lens also works as an MCP server, so any MCP client (Claude Desktop, Claude Code, etc.) can use its research tools. This is optional; the app and agent don't need it.
+RWA Lens includes an **MCP server** (Model Context Protocol), so AI assistants like Claude Desktop, Claude Code and Cursor can research tokenized RWAs and manage the paper portfolio in plain language. The server runs on your machine over stdio; RWA Lens itself never calls an AI service. This is optional, and the app and its built-in agent work without it.
 
-Tools: `rwa_market_overview` · `rwa_screen` · `rwa_token_detail` · `rwa_peg_check` · `rwa_issuer_report` · `portfolio_get` · `paper_order`
+### Tools it exposes
+
+| Tool | What the AI can do with it |
+|---|---|
+| `rwa_market_overview` | RWA market cap and volume, share of total crypto, BTC dominance, breakdown by asset type |
+| `rwa_screen` | Screen ~263 tokens by asset type, signal, volume or text; sort by score, momentum, premium… |
+| `rwa_token_detail` | One token: metrics, sibling tokens from other issuers, 30-day history stats |
+| `rwa_peg_check` | Tokens trading away from their peers, e.g. *"is any gold token de-pegged?"* |
+| `rwa_issuer_report` | Issuer scorecard: tokens, assets, market cap, turnover, peg tightness |
+| `portfolio_get` | The paper portfolio: cash, positions, P&L, orders awaiting approval |
+| `paper_order` | Place a **paper** buy or sell. It passes the same risk limits; no real trade is ever made |
+
+The research tools call CoinMarketCap directly (same cache, credit budget and evidence log). The two portfolio tools talk to the running app, so **start the app first** (`npm start`) if you want them.
+
+### Step 1: check the server works
+
+```bash
+npm run mcp:check
+```
+```
+✓ handshake: rwa-lens 0.1.0
+✓ 7 tools: rwa_market_overview, rwa_screen, rwa_token_detail, rwa_peg_check, rwa_issuer_report, portfolio_get, paper_order
+✓ rwa_peg_check("gold") returned 6 tokens, e.g. GLDon +0.444%, GLDX -0.442%, XAUM -0.387%
+✓ portfolio_get: connected to the running app
+```
+
+### Step 2: get the absolute paths
+
+AI clients launch the server themselves, so they need absolute paths. From the project folder:
+
+```bash
+echo "$(pwd)/node_modules/.bin/tsx"     # the command
+echo "$(pwd)/mcp/server.ts"             # its argument
+```
+
+On Windows use `node_modules\.bin\tsx.cmd` and backslash paths (escape them as `\\` inside JSON). The server finds `.env` in the project folder by itself, so no `cwd` setting is needed.
+
+### Step 3: add it to your AI client
 
 **Claude Code**
 ```bash
 claude mcp add rwa-lens -- /ABSOLUTE/PATH/rwa-lens/node_modules/.bin/tsx /ABSOLUTE/PATH/rwa-lens/mcp/server.ts
+claude mcp list          # should show rwa-lens
 ```
 
-**Claude Desktop** (`claude_desktop_config.json`)
+**Claude Desktop.** Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`), then fully quit and reopen Claude Desktop:
 ```json
 {
   "mcpServers": {
@@ -241,11 +279,24 @@ claude mcp add rwa-lens -- /ABSOLUTE/PATH/rwa-lens/node_modules/.bin/tsx /ABSOLU
 }
 ```
 
-It reads `.env` from the project folder whatever directory it's launched from. Portfolio tools go through the running app (`RWA_LENS_URL`, default `http://localhost:8787`). Try asking:
+**Cursor, Windsurf or any other MCP client.** Use the same `command` + `args` as a stdio server; for Cursor that's `~/.cursor/mcp.json` with the same `mcpServers` block.
+
+**Optional environment** (add an `"env": { … }` block to the server entry):
+
+| Variable | When you need it |
+|---|---|
+| `RWA_LENS_URL` | The app isn't on `http://localhost:8787`, e.g. a deployed `https://<project>.pages.dev` |
+| `ADMIN_TOKEN` | The app has `ADMIN_TOKEN` set, so `paper_order` must send it |
+
+### Step 4: ask it things
 
 - *"Which tokenized NVIDIA is cheapest right now, and how liquid is it?"*
-- *"Is any gold token de-pegged?"*
-- *"Compare Ondo and Backed as issuers."*
+- *"Is any gold token de-pegged? Show the spread against its peers."*
+- *"Compare Ondo and Backed as issuers: who tracks the underlying more tightly?"*
+- *"Screen for liquid ETFs with a DISCOUNT signal and explain the top three."*
+- *"What's in my paper portfolio? Sell half of the worst performer."* (needs the app running)
+
+The assistant chooses which tools to call. Orders it places appear in the app's Portfolio page, and risk rejections come back to it with the reason.
 
 ## Configuration
 
