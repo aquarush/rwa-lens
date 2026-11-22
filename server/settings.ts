@@ -7,11 +7,11 @@ export const SettingsSchema = z.object({
   intervalMin: z.number().int().min(5).max(24 * 60),
   /** true: agent orders fill immediately. false: they wait for approval in the UI */
   autopilot: z.boolean(),
-  /** "auto" uses Claude when Anthropic credentials exist, else the rule-based strategy */
-  engine: z.enum(["auto", "claude", "rules"]),
-  /** free-text guidance from the user, passed to the agent every run */
-  strategyNotes: z.string().max(2000),
-  // ---- risk limits, enforced in code on every order regardless of engine ----
+  /** balanced: discounts + momentum + rebounds · momentum: trend-following · value: discounts vs peers + rebounds */
+  strategy: z.enum(["balanced", "momentum", "value"]),
+  /** minimum 0-100 screener score for a new entry */
+  minScore: z.number().min(0).max(100),
+  // ---- risk limits, enforced in code on every order ----
   killSwitch: z.boolean(),
   maxPositionPct: z.number().min(1).max(100),
   maxGrossExposurePct: z.number().min(0).max(100),
@@ -32,8 +32,8 @@ export const DEFAULT_SETTINGS: Settings = {
   agentEnabled: false,
   intervalMin: 60,
   autopilot: false,
-  engine: "auto",
-  strategyNotes: "",
+  strategy: "balanced",
+  minScore: 55,
   killSwitch: false,
   maxPositionPct: 20,
   maxGrossExposurePct: 80,

@@ -49,7 +49,7 @@ async function tick() {
       lastAgentAt = Date.now();
       schedulerState.lastAgentAt = new Date().toISOString();
       const run = await runAgent("schedule");
-      pushAlert("agent", `run:${run.id}`, `Agent run ${run.status} (${run.engine})`, run.summary, false);
+      pushAlert("agent", `run:${run.id}`, `Agent run ${run.status} (${run.strategy})`, run.summary, false);
     } else if (!schedulerState.lastMtmAt || Date.now() - Date.parse(schedulerState.lastMtmAt) >= MTM_MIN * 60_000) {
       await quickMarkToMarket();
     }

@@ -37,10 +37,9 @@ Added at the user's request: an **AI agent that trades** (paper only: CMC has no
 - [x] CMC client: cache, evidence log, daily credit budget, mock mode, fixture recording
 - [x] Screener: peer-relative pricing (volume-weighted median of siblings, excluding self), unit-mismatch detection, signals, score
 - [x] Paper engine: fees, slippage, risk checks, stop-loss/take-profit, approval queue
-- [x] Agent: Claude (tool runner) + rule-engine fallback, journal, scheduler, alerts (+Telegram)
+- [x] Agent: rule-based decision loop on CMC data only (regime → review → screen → research → vol-targeted sizing), journal, scheduler, alerts (+Telegram). The Claude/LLM engine was removed by request: no external AI service
 - [x] Web UI: dashboard, screener, asset detail, agent console, portfolio, issuers, alerts, API evidence
 - [x] MCP server (7 tools), tests, README, docs/API_FEEDBACK.md
-- [ ] Add ANTHROPIC_API_KEY and do a live Claude agent run (only the rule engine has run so far)
 - [ ] `npm run record` for a real mock snapshot (~65 credits); decide whether to commit fixtures
 - [ ] Deploy with ADMIN_TOKEN set, demo video, X post, DoraHacks submission
 

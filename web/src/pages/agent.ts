@@ -9,12 +9,15 @@ export async function renderAgent(app: HTMLElement, token: number, runId?: strin
   if (!isCurrent(token)) return;
   selected ??= runs[0]?.id;
 
-  const engineNote = status?.engine === "claude"
-    ? `Claude <b>${esc(status.model)}</b> researches with tools (screen, token detail, portfolio) and places orders. Every order passes the risk limits below.`
-    : `Running the <b>rule engine</b>${status?.anthropicConfigured ? "" : " because no ANTHROPIC_API_KEY is set"}. Add a key to .env to let Claude make the decisions; the risk limits apply either way.`;
+  const STYLE: Record<string, string> = {
+    balanced: "peer discounts, momentum and rebounds",
+    momentum: "trend-following (24h and 7d momentum)",
+    value: "discounts vs sibling tokens and rebounds",
+  };
+  const intro = `A rule-based agent that decides from CoinMarketCap data alone, with no external AI service. Each run it reads the market regime, reviews open positions, screens the tokenized-RWA universe, researches each shortlisted asset's 30-day history, then sizes orders by volatility. Current style: <b>${esc(settings.strategy)}</b> (${STYLE[settings.strategy] ?? ""}). Every order passes the risk limits below.`;
 
   app.innerHTML = `
-    <div class="spread"><div><h1>AI Agent</h1><p class="sub">${engineNote}</p></div>
+    <div class="spread"><div><h1>Trading agent</h1><p class="sub">${intro}</p></div>
       <div class="row"><button class="primary" id="run" ${status?.agentRunning ? "disabled" : ""}>${status?.agentRunning ? "Running…" : "Run agent now"}</button></div></div>
     ${status?.adminRequired ? `<div class="banner">This deployment requires an admin token for actions. <input id="tok" placeholder="admin token" value="${esc(adminToken.get())}" style="margin-left:8px"/> <button class="sm" id="savetok">Save</button></div>` : ""}
 
@@ -28,7 +31,7 @@ export async function renderAgent(app: HTMLElement, token: number, runId?: strin
     <div class="grid runs-layout">
       <div class="card"><h2>Runs</h2><div id="runs">${runs.length ? runs.map((r) => `
         <div class="run-item ${r.id === selected ? "active" : ""}" data-run="${r.id}">
-          <div class="spread"><b>${r.engine === "claude" ? "Claude" : "Rules"}</b><span class="small muted">${ago(r.startedAt)}</span></div>
+          <div class="spread"><b>${esc(runLabel(r))}</b><span class="small muted">${ago(r.startedAt)}</span></div>
           <div class="small ${r.status === "error" ? "down" : "muted"}">${esc(r.status)} · ${r.trigger} · ${r.orderIds.length} order${r.orderIds.length === 1 ? "" : "s"}</div>
         </div>`).join("") : `<div class="empty">No runs yet.</div>`}</div></div>
       <div class="card" id="detail"><div class="empty">Select a run.</div></div>
@@ -40,7 +43,8 @@ export async function renderAgent(app: HTMLElement, token: number, runId?: strin
         <label class="check"><input type="checkbox" id="agentEnabled" ${settings.agentEnabled ? "checked" : ""}/> Run on a schedule</label>
         <label class="field">Every (minutes)<input type="number" id="intervalMin" min="5" value="${settings.intervalMin}"/></label>
         <label class="check"><input type="checkbox" id="autopilot" ${settings.autopilot ? "checked" : ""}/> Autopilot (fill without approval)</label>
-        <label class="field">Engine<select id="engine">${[["auto", "Auto (Claude if key set)"], ["claude", "Claude"], ["rules", "Rule engine"]].map(([v, l]) => `<option value="${v}" ${settings.engine === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        <label class="field">Strategy style<select id="strategy">${[["balanced", "Balanced"], ["momentum", "Momentum"], ["value", "Value (vs peers)"]].map(([v, l]) => `<option value="${v}" ${settings.strategy === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        <label class="field">Min score for entries (0-100)<input type="number" id="minScore" min="0" max="100" value="${settings.minScore}"/></label>
         <label class="check"><input type="checkbox" id="killSwitch" ${settings.killSwitch ? "checked" : ""}/> <span class="down">Kill switch (block all new orders)</span></label>
         <label class="check"><input type="checkbox" id="avoidLeveraged" ${settings.avoidLeveraged ? "checked" : ""}/> Avoid leveraged/inverse ETFs</label>
       </div>
@@ -59,7 +63,7 @@ export async function renderAgent(app: HTMLElement, token: number, runId?: strin
       <h3 style="margin-top:16px">Allowed asset types</h3>
       <div class="row">${TYPES.map((t) => `<label class="check"><input type="checkbox" data-type="${t}" ${settings.allowedTypes.includes(t) ? "checked" : ""}/> ${typeLabel(t)}</label>`).join("")}</div>
       <label class="field" style="margin-top:16px">Blocked symbols (comma-separated)<input id="blockedSymbols" value="${esc(settings.blockedSymbols.join(", "))}"/></label>
-      <label class="field" style="margin-top:12px">Strategy notes for the agent<textarea id="strategyNotes" placeholder="e.g. Prefer gold and broad ETFs; avoid single stocks over the weekend; keep positions small.">${esc(settings.strategyNotes)}</textarea></label>
+
     </div>`;
 
   // ----- actions -----
@@ -101,7 +105,7 @@ export async function renderAgent(app: HTMLElement, token: number, runId?: strin
     const v = (id: string) => (app.querySelector(`#${id}`) as HTMLInputElement);
     const patch: Record<string, unknown> = {
       agentEnabled: v("agentEnabled").checked, autopilot: v("autopilot").checked, killSwitch: v("killSwitch").checked, avoidLeveraged: v("avoidLeveraged").checked,
-      intervalMin: Number(v("intervalMin").value), engine: v("engine").value, strategyNotes: v("strategyNotes").value,
+      intervalMin: Number(v("intervalMin").value), strategy: v("strategy").value, minScore: Number(v("minScore").value),
       blockedSymbols: v("blockedSymbols").value.split(",").map((s) => s.trim()).filter(Boolean),
       allowedTypes: [...app.querySelectorAll<HTMLInputElement>("[data-type]")].filter((c) => c.checked).map((c) => c.dataset.type),
     };
@@ -124,11 +128,11 @@ export async function renderAgent(app: HTMLElement, token: number, runId?: strin
     if (!isCurrent(token)) return;
     const delta = r.equityAfter != null && r.equityBefore != null ? ((r.equityAfter / r.equityBefore - 1) * 100) : null;
     box.innerHTML = `
-      <div class="spread"><h2>${r.engine === "claude" ? `Claude · ${esc(r.model)}` : "Rule engine"}</h2><span class="small muted">${new Date(r.startedAt).toLocaleString()}${r.finishedAt ? ` · ${Math.round((Date.parse(r.finishedAt) - Date.parse(r.startedAt)) / 1000)}s` : ""}</span></div>
+      <div class="spread"><h2>${esc(runLabel(r))}</h2><span class="small muted">${new Date(r.startedAt).toLocaleString()}${r.finishedAt ? ` · ${Math.round((Date.parse(r.finishedAt) - Date.parse(r.startedAt)) / 1000)}s` : ""}</span></div>
       <p>${esc(r.summary ?? (r.status === "running" ? "Running…" : ""))}</p>
-      <p class="small muted">Status ${esc(r.status)} · ${r.orderIds.length} order(s) · equity ${usd(r.equityBefore, { dp: 0 })} → ${usd(r.equityAfter, { dp: 0 })} ${delta != null ? `(${pct(delta, 3)})` : ""}${r.usage ? ` · tokens in ${r.usage.input.toLocaleString()} / out ${r.usage.output.toLocaleString()} / cache read ${r.usage.cacheRead.toLocaleString()}` : ""}</p>
+      <p class="small muted">Status ${esc(r.status)} · ${r.orderIds.length} order(s) · equity ${usd(r.equityBefore, { dp: 0 })} → ${usd(r.equityAfter, { dp: 0 })} ${delta != null ? `(${pct(delta, 3)})` : ""}</p>
       <h3>Journal</h3>
-      <div class="journal">${r.steps.map((s: any) => `<div class="step ${s.type}"><div class="t">${new Date(s.t).toLocaleTimeString()} · ${s.type.replace("_", " ")}</div><div>${esc(s.title)}</div>${detail(s)}</div>`).join("")}</div>`;
+      <div class="journal">${r.steps.map((s: any) => `<div class="step ${s.type}"><div class="t">${new Date(s.t).toLocaleTimeString()} · ${STEP_LABEL[s.type] ?? s.type}</div><div>${esc(s.title)}</div>${detail(s)}</div>`).join("")}</div>`;
   }
 
   let timer: number | undefined;
@@ -147,12 +151,18 @@ export async function renderAgent(app: HTMLElement, token: number, runId?: strin
   return () => clearTimeout(timer);
 }
 
+/** "Balanced run"; older journal entries from earlier versions have no strategy field. */
+const runLabel = (r: any) => (r.strategy ? `${r.strategy[0].toUpperCase()}${r.strategy.slice(1)} run` : "Agent run");
+
+const STEP_LABEL: Record<string, string> = { info: "data", thinking: "reasoning", text: "note", tool_call: "call", tool_result: "result", order: "order", error: "error" };
+
 function numField(id: string, label: string, s: Record<string, number>) {
   return `<label class="field">${label}<input type="number" id="${id}" value="${s[id]}" step="any"/></label>`;
 }
 
 function detail(s: any) {
   if (s.detail == null) return "";
-  if (typeof s.detail === "string") return s.type === "text" || s.type === "thinking" ? `<pre>${esc(s.detail)}</pre>` : `<details><summary>details</summary><pre>${esc(s.detail)}</pre></details>`;
-  return `<details><summary>details</summary><pre>${esc(JSON.stringify(s.detail, null, 1))}</pre></details>`;
+  if (typeof s.detail === "string") return s.type === "text" || s.type === "thinking" ? `<div class="small muted" style="margin-top:2px">${esc(s.detail)}</div>` : `<details><summary>details</summary><pre>${esc(s.detail)}</pre></details>`;
+  const why = s.type === "order" && typeof s.detail.reason === "string" ? `<div class="small muted" style="margin-top:2px">${esc(s.detail.reason)}</div>` : "";
+  return `${why}<details><summary>details</summary><pre>${esc(JSON.stringify(s.detail, null, 1))}</pre></details>`;
 }

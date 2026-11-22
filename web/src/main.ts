@@ -10,9 +10,7 @@ import { renderAlerts, renderEvidence } from "./pages/misc";
 
 export interface Status {
   mode: "live" | "mock";
-  engine: "claude" | "rules";
-  anthropicConfigured: boolean;
-  model: string;
+  strategy: string;
   adminRequired: boolean;
   agentRunning: boolean;
   scheduler: { lastMtmAt: string | null; lastAgentAt: string | null; nextAgentAt: string | null; lastError: string | null };
@@ -33,7 +31,7 @@ async function refreshStatus() {
     const b = status.cmc.budget;
     document.getElementById("status-pill")!.innerHTML = `
       <div><span class="dot ${status.mode}"></span> CMC ${status.mode === "live" ? "live data" : "mock data"}</div>
-      <div>Agent: ${status.engine === "claude" ? "Claude" : "rule engine"}${status.agentRunning ? " · running…" : ""}</div>
+      <div>Agent: ${status.strategy} strategy${status.agentRunning ? " · running…" : ""}</div>
       <div>Credits today: ${b.used}/${b.limit}</div>
       <div>Paper trading only</div>`;
   } catch {
@@ -50,7 +48,7 @@ async function route() {
   const [path, query] = location.hash.replace(/^#\/?/, "").split("?");
   const parts = path.split("/").filter(Boolean);
   document.querySelectorAll<HTMLAnchorElement>(".nav nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === (parts[0] ?? "")));
-  const titles: Record<string, string> = { screener: "Screener", asset: "Asset", agent: "AI Agent", portfolio: "Portfolio", issuers: "Issuers", alerts: "Alerts", evidence: "API Evidence" };
+  const titles: Record<string, string> = { screener: "Screener", asset: "Asset", agent: "Agent", portfolio: "Portfolio", issuers: "Issuers", alerts: "Alerts", evidence: "API Evidence" };
   document.title = parts[0] && titles[parts[0]] ? `${titles[parts[0]]} · RWA Lens` : "RWA Lens";
   app.innerHTML = `<div class="spinner">Loading…</div>`;
   window.scrollTo(0, 0);

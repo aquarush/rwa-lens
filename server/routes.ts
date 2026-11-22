@@ -1,10 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { getRun, isRunning, listRuns } from "./agent/journal.ts";
-import { resolveEngine, runAgent } from "./agent/run.ts";
+import { runAgent } from "./agent/run.ts";
 import { listAlerts, pushAlert, scanDepegs } from "./alerts.ts";
 import { CmcError, cmcStats, readEvidence } from "./cmc.ts";
-import { config, hasAnthropicCreds, mockMode } from "./config.ts";
+import { mockMode } from "./config.ts";
 import {
   approvePending, cancelPending, equityHistory, orderHistory, placeOrder, portfolioSummary, resetPortfolio,
 } from "./portfolio.ts";
@@ -33,9 +33,7 @@ export async function routes(app: FastifyInstance) {
 
   app.get("/api/status", async () => ({
     mode: mockMode() ? "mock" : "live",
-    engine: resolveEngine(),
-    anthropicConfigured: hasAnthropicCreds(),
-    model: config.anthropicModel,
+    strategy: getSettings().strategy,
     adminRequired: Boolean(ADMIN_TOKEN),
     agentRunning: isRunning(),
     scheduler: schedulerState,
@@ -151,7 +149,7 @@ export async function routes(app: FastifyInstance) {
   app.post("/api/agent/run", { preHandler: requireAdmin }, async (_req, reply) => {
     if (isRunning()) return reply.code(409).send({ error: "an agent run is already in progress" });
     // fire and forget; the UI polls the journal
-    const p = runAgent("manual").then((run) => pushAlert("agent", `run:${run.id}`, `Agent run ${run.status} (${run.engine})`, run.summary, false));
+    const p = runAgent("manual").then((run) => pushAlert("agent", `run:${run.id}`, `Agent run ${run.status} (${run.strategy})`, run.summary, false));
     p.catch((err) => console.warn("[agent]", err.message));
     await new Promise((r) => setTimeout(r, 150));
     return { started: true, run: listRuns(1)[0] ?? null };

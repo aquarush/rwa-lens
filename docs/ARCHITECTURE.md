@@ -1,6 +1,6 @@
 # Architecture
 
-How RWA Lens turns CoinMarketCap data into a screener, a peg monitor and an AI paper-trading agent.
+How RWA Lens turns CoinMarketCap data into a screener, a peg monitor and a rule-based paper-trading agent. No LLM or external AI service is involved anywhere.
 
 ## Overview
 
@@ -12,7 +12,7 @@ How RWA Lens turns CoinMarketCap data into a screener, a peg monitor and an AI p
                  │  rwa.ts        typed endpoint wrappers · cleans live-data quirks                          │
                  │  screener.ts   peer pricing · signals · score · issuer scorecard · market overview        │
                  │  portfolio.ts  paper engine: fills · fees · slippage · risk checks · stops               │
-                 │  agent/        claude.ts (Claude tool runner) · rules.ts · tools.ts · journal.ts · run.ts │
+                 │  agent/        strategy.ts (decision loop) · tools.ts · journal.ts · run.ts               │
                  │  scheduler.ts  agent on an interval · cheap mark-to-market                                │
                  │  alerts.ts     de-pegs · exits · agent runs (+ Telegram)                                  │
                  │  routes.ts     REST API                       store.ts  JSON persistence in DATA_DIR     │
@@ -21,7 +21,7 @@ How RWA Lens turns CoinMarketCap data into a screener, a peg monitor and an AI p
                        web/ (Vite · TS · Chart.js)               mcp/server.ts (MCP over stdio)
 ```
 
-Everything shares one implementation. The web UI, the Claude agent, the rule engine and the MCP server all call the same screener and tool functions, and every order goes through the same `placeOrder()` → `riskCheck()` path.
+Everything shares one implementation. The web UI, the trading agent and the MCP server all call the same screener and tool functions, and every order goes through the same `placeOrder()` → `riskCheck()` path.
 
 ## Data flow for one snapshot
 
@@ -72,28 +72,40 @@ CMC's `average_tokenized_price` can't answer that on live data, because tokens w
 
 ## The agent (`agent/`)
 
-`run.ts` takes a snapshot, marks to market, picks the engine and journals everything.
+`run.ts` takes a snapshot, marks positions to market (which can fire stop-loss and take-profit exits), runs the strategy and journals everything.
 
-### Claude engine (`claude.ts`)
+### Decision loop (`strategy.ts`)
 
-- Uses the Anthropic SDK **tool runner** (`client.beta.messages.toolRunner`) with Zod-typed tools: `get_portfolio`, `get_market_overview`, `screen_tokens`, `get_token_detail`, `place_order`.
-- Model `claude-opus-5-5` (override with `ANTHROPIC_MODEL`), adaptive thinking with summarized display (shown in the journal), effort `medium`, and at most 14 iterations.
-- The server-side refusal fallback is on (`fallbacks: "default"`).
-- The system prompt is stable and cached (1h TTL). Per-run context (time, autopilot state, the user's strategy notes) goes in the user message.
-- Tool results are compact JSON (`compactRow`) to keep context small.
-- Risk rejections come back to Claude as tool results, so it can adapt, for example by sizing down.
+All inputs come from CoinMarketCap; the logic is plain, deterministic TypeScript.
 
-### Rule engine (`rules.ts`)
+1. **Market regime** from `/v1/global-metrics/quotes/latest` (total crypto market cap 24h change):
 
-The deterministic fallback, used when no Anthropic credentials are set or when chosen in settings.
-- **Exits:** momentum turned down while under water, or a premium above 1.5% while in profit.
-- **Entries:** liquid tokens with score ≥ 55 and DISCOUNT, MOMENTUM_UP or REBOUND, excluding PREMIUM, MOMENTUM_DOWN and LEVERAGED. It takes one token per asset (the best-priced sibling), sized at half the max position.
+   | Regime | Condition | Effect |
+   |---|---|---|
+   | risk-off | ≤ −3% | new sizes ×0.5, no momentum entries, cut losers below −4% |
+   | neutral | between | sizes ×0.85 |
+   | risk-on | ≥ +2% | full size |
+
+2. **Position review.** Sell when momentum turns down while under water (< −2%), harvest a premium > 1.5% vs peers while in profit, or cut losers in risk-off. Otherwise hold, and log why.
+3. **Screen.** Keep tokens that pass all of these, and count the reason for every rejection:
+   - liquid (≥ min volume), allowed asset type, not leveraged;
+   - not PREMIUM or MOMENTUM_DOWN;
+   - has a signal of the chosen style (*balanced*: DISCOUNT/MOMENTUM_UP/REBOUND · *momentum*: MOMENTUM_UP · *value*: DISCOUNT/REBOUND);
+   - score ≥ min score, and not already held.
+
+   Then keep the best-priced sibling per asset and shortlist up to 2× the per-run order limit.
+4. **Research** each shortlisted asset with `/v5/real-world-assets/quotes/historical` (30 daily points): 30-day return, daily volatility (stdev of log returns) and drawdown from the 30-day high.
+   - Skip **falling knives**: drawdown < −25% without a REBOUND signal.
+   - Skip anything with daily volatility > 8%.
+5. **Sizing.** Base size is half the max position. It's scaled by a volatility target (2% daily vol target; multiplier clamped 0.4-1.5×) and the regime multiplier, and capped by the position limit and available cash above the cash floor. Orders go through `riskCheck()`; rejections are journaled.
+
+The pure parts (`regimeFrom`, `volTargetSize`, `historyStats`) are unit-tested.
 
 ### Journal
 
 Every run records:
 - the snapshot info and each tool call and result (with a preview);
-- Claude's reasoning summary and text;
+- the market regime, filter counts, and the reasoning behind every hold, skip, buy and sell;
 - every order with its status or rejection reason;
 - equity before and after, and token usage.
 

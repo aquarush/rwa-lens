@@ -11,8 +11,8 @@ export interface Step {
 export interface AgentRun {
   id: string;
   trigger: "manual" | "schedule";
-  engine: "claude" | "rules";
-  model?: string;
+  /** strategy style used for the run (older runs may carry a legacy "engine" field) */
+  strategy: string;
   startedAt: string;
   finishedAt?: string;
   status: "running" | "done" | "error";
@@ -21,13 +21,12 @@ export interface AgentRun {
   orderIds: string[];
   equityBefore?: number;
   equityAfter?: number;
-  usage?: { input: number; output: number; cacheRead: number };
 }
 
 const store = jsonStore<{ runs: AgentRun[] }>("agent-runs.json", () => ({ runs: [] }));
 
-export function startRun(trigger: AgentRun["trigger"], engine: AgentRun["engine"], model?: string): AgentRun {
-  const run: AgentRun = { id: crypto.randomUUID(), trigger, engine, model, startedAt: new Date().toISOString(), status: "running", steps: [], orderIds: [] };
+export function startRun(trigger: AgentRun["trigger"], strategy: string): AgentRun {
+  const run: AgentRun = { id: crypto.randomUUID(), trigger, strategy, startedAt: new Date().toISOString(), status: "running", steps: [], orderIds: [] };
   store.update((s) => {
     s.runs.push(run);
     if (s.runs.length > 200) s.runs.splice(0, s.runs.length - 200);

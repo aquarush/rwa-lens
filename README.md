@@ -2,7 +2,7 @@
 
 # ◎ RWA Lens
 
-**Screener, peg monitor and AI paper-trading agent for tokenized real-world assets, built on the CoinMarketCap API.**
+**Screener, peg monitor and paper-trading agent for tokenized real-world assets, built on the CoinMarketCap API.**
 
 Real World Assets track · CMC API Hackathon Round 2 · #BuildwithCMC
 
@@ -20,7 +20,7 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 
 1. **Which token should I hold?** Every token is priced against its siblings tracking the same asset. That surfaces discounts, premiums and de-pegs, and detects tokens quoted in a different unit instead of calling them 90% de-pegs.
 2. **What's moving, and can I actually trade it?** Token-level momentum, liquidity and turnover, and a 0-100 score.
-3. **Can an AI manage it?** A Claude agent researches with tools and trades a **paper** portfolio. Risk limits are enforced in code, every step is journaled, and there's an approval queue.
+3. **Can it trade on its own?** A rule-based agent that decides from CoinMarketCap data alone (no external AI service) reads the market, researches candidates and trades a **paper** portfolio. Risk limits are enforced in code, every decision is explained in a journal, and there's an approval queue.
 
 > **Paper trading only.** No real orders are ever sent anywhere. Fills are simulated at live CMC prices with fees and size-based slippage.
 
@@ -30,8 +30,8 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 - [Features](#features)
 - [Quick start](#quick-start)
 - [CoinMarketCap endpoints used](#coinmarketcap-endpoints-used)
-- [The AI agent](#the-ai-agent)
-- [MCP server](#mcp-server-claude-desktop--claude-code)
+- [The trading agent](#the-trading-agent)
+- [MCP server (optional)](#mcp-server-optional)
 - [Configuration](#configuration)
 - [Project structure](#project-structure)
 - [Deploying](#deploying)
@@ -42,7 +42,7 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 | Screener | Asset detail |
 |---|---|
 | ![Screener](docs/screenshots/screener.png) | ![Asset](docs/screenshots/asset.png) |
-| **AI agent: journal, approvals, risk settings** | **Issuer scorecard** |
+| **Trading agent: journal, approvals, risk settings** | **Issuer scorecard** |
 | ![Agent](docs/screenshots/agent.png) | ![Issuers](docs/screenshots/issuers.png) |
 | **API evidence: every live call, key redacted** | **Dark mode** |
 | ![Evidence](docs/screenshots/evidence.png) | ![Dark](docs/screenshots/dashboard-dark.png) |
@@ -54,7 +54,7 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 | **Dashboard** | RWA tokenized market cap, RWA share of total crypto market cap, off-peg count, equity curve, market cap by asset type, biggest moves vs peers, top movers, latest agent run, alerts |
 | **Screener** | ~265 tokens across the top ~60 tokenized assets. Search; filter by asset type, signal, volume and liquidity; sort any column; trade from any row |
 | **Asset detail** | 90-day or 7-day hourly history of price and volume; every token tracking the asset with *vs peers*; market pairs where the plan allows |
-| **AI agent** | Run now or on a schedule; approve or reject proposals; per-run journal (Claude's reasoning summary, tool calls, orders, risk rejections); risk settings, kill switch, strategy notes |
+| **Trading agent** | Run now or on a schedule; balanced, momentum or value style; approve or reject proposals; per-run journal explaining every decision (market regime, filters, research, sizing, risk rejections); risk settings and kill switch |
 | **Portfolio** | Positions, realized and unrealized P&L, equity curve, order history with slippage and fees, manual trading, reset |
 | **Issuers** | Market cap, volume, turnover and **peg tightness** per issuer |
 | **Alerts** | De-pegs (liquid token ≥ 1.5% from peers), stop-loss and take-profit exits, agent runs, trades. Optional Telegram |
@@ -70,20 +70,18 @@ Requires Node 22+.
 ```bash
 git clone <this repo> && cd rwa-lens
 npm install
-cp .env.example .env     # add CMC_API_KEY, and optionally ANTHROPIC_API_KEY
+cp .env.example .env     # add your CMC_API_KEY
 npm run build            # build the web UI
 npm start                # → http://localhost:8787
 ```
 
-**No keys? It still runs.**
-- No `CMC_API_KEY` means **mock mode**. It replays real responses from `fixtures/recorded/` (create them with `npm run record`), or falls back to a clearly labelled synthetic market in the documented response shapes.
-- No `ANTHROPIC_API_KEY` means the agent uses the transparent **rule engine** instead of Claude. Same tools, same risk checks.
+**No key? It still runs.** No `CMC_API_KEY` means **mock mode**. It replays real responses from `fixtures/recorded/` (create them with `npm run record`), or falls back to a clearly labelled synthetic market in the documented response shapes.
 
 | Script | |
 |---|---|
 | `npm run dev` | API with hot reload on :8787, plus the UI dev server on :5173 (proxies `/api`) |
 | `npm run build` / `npm start` | Production build, served by the API server |
-| `npm test` | 9 tests: peer pricing, unit mismatch, risk engine, fills, approvals, stop-loss, kill switch, mock shapes. They use a temp data dir and spend no credits |
+| `npm test` | 11 tests: peer pricing, unit mismatch, risk engine, fills, approvals, stop-loss, kill switch, agent regime and sizing, mock shapes. They use a temp data dir and spend no credits |
 | `npm run typecheck` | `tsc --noEmit` across server, web, MCP and tests |
 | `npm run mcp` | Run the MCP server on stdio |
 | `npm run record [n]` | Record real responses for the top *n* assets into `fixtures/recorded/` for mock mode (~65 credits for n = 10) |
@@ -129,17 +127,31 @@ X-CMC_PRO_API_KEY: <redacted>
 
 Live data showed CMC's `average_tokenized_price` being skewed by tokens quoted in a different unit: two SanDisk tokens at about $655 against five at about $82 gave an "average" of $87.7, so every real token looked 6% cheap. RWA Lens finds each asset's dominant unit, flags the outliers `UNIT_MISMATCH`, and prices each token against the **volume-weighted median of its other comparable siblings**. Details are in [ARCHITECTURE.md](docs/ARCHITECTURE.md#peer-pricing).
 
-## The AI agent
+## The trading agent
+
+A transparent, rule-based agent. It makes every decision from CoinMarketCap data: **no LLM, no external AI service, no extra API key.**
+
+Each run:
+
+| Step | Data | What it decides |
+|---|---|---|
+| **1. Read the market** | `/v1/global-metrics/quotes/latest` | Regime from the total crypto market's 24h move. **Risk-off** (≤ −3%) halves new sizes and skips momentum buys; **risk-on** (≥ +2%) trades at full size |
+| **2. Review positions** | screener snapshot | Sell on a momentum break while under water, harvest a premium vs peers while in profit, cut losers in risk-off; otherwise hold, with the reason logged |
+| **3. Screen** | `/v5/real-world-assets/*` + `/v2/cryptocurrency/quotes/latest` | Keep liquid, allowed, non-leveraged tokens that have the style's signals and a high enough score. The journal counts why the rest were filtered out. Takes the best-priced sibling per asset |
+| **4. Research** | `/v5/real-world-assets/quotes/historical` | 30-day return, daily volatility and drawdown for each shortlisted asset. Skips falling knives (drawdown > 25% without a rebound) and anything too volatile |
+| **5. Size and act** | | Volatility-targeted size (calmer assets get bigger positions), scaled by regime, then placed through the risk engine |
+
+**Styles:** *balanced* (discounts, momentum and rebounds), *momentum* (trend-following) or *value* (discounts vs peers and rebounds).
 
 | | |
 |---|---|
-| **Claude engine** | Claude Opus 5.5 through the Anthropic SDK **tool runner**: adaptive thinking (summary shown in the journal), server-side refusal fallback, cached system prompt. Tools: `get_portfolio`, `get_market_overview`, `screen_tokens`, `get_token_detail`, `place_order` |
-| **Rule engine** | Deterministic fallback. Buys liquid, high-score tokens with DISCOUNT, MOMENTUM_UP or REBOUND (best-priced sibling per asset); exits on momentum breaks or harvestable premiums |
-| **Risk, in code** | Every order, from Claude, the rules or you, passes the same checks: kill switch, max position %, gross exposure, cash floor, min volume, max premium paid, allowed types, blocked symbols, leveraged-ETF block, orders per run. Stop-loss and take-profit run on every re-price |
+| **Risk, in code** | Every order, from the agent, the MCP server or you, passes the same checks: kill switch, max position %, gross exposure, cash floor, min volume, max premium paid, allowed types, blocked symbols, leveraged-ETF block, orders per run. Stop-loss and take-profit run on every re-price |
 | **Human in the loop** | Autopilot is **off** by default. The agent proposes, you approve, and approved orders are re-validated at the current price |
-| **Transparency** | Each run's journal shows reasoning, tool calls and results, orders, rejections, equity before and after, and token usage |
+| **Transparency** | Each run's journal shows the regime, the filter counts, every hold/skip/buy/sell reason with the numbers behind it, and equity before and after |
 
-## MCP server (Claude Desktop / Claude Code)
+## MCP server (optional)
+
+RWA Lens also works as an MCP server, so any MCP client (Claude Desktop, Claude Code, etc.) can use its research tools. This is optional; the app and agent don't need it.
 
 Tools: `rwa_market_overview` · `rwa_screen` · `rwa_token_detail` · `rwa_peg_check` · `rwa_issuer_report` · `portfolio_get` · `paper_order`
 
@@ -173,8 +185,6 @@ All settings go in `.env` (see [`.env.example`](.env.example)). Agent and risk s
 | Variable | Default | |
 |---|---|---|
 | `CMC_API_KEY` | – | Empty means mock mode |
-| `ANTHROPIC_API_KEY` | – | Empty means the rule engine |
-| `ANTHROPIC_MODEL` | `claude-opus-5-5` | |
 | `CMC_DAILY_CREDIT_BUDGET` | `600` | Hard daily cap; serves cached data once reached |
 | `ADMIN_TOKEN` | – | **Set on any public deploy.** Required for trading, agent runs and settings |
 | `PAPER_STARTING_CASH` | `100000` | |
@@ -202,7 +212,7 @@ rwa-lens/
 │   ├── screener.ts         peer pricing, signals, score, issuers, overview
 │   ├── portfolio.ts        paper fills, fees, slippage, risk checks, stops
 │   ├── settings.ts         agent and risk settings (zod-validated)
-│   ├── agent/              claude.ts · rules.ts · tools.ts · journal.ts · run.ts
+│   ├── agent/              strategy.ts (decision loop) · tools.ts · journal.ts · run.ts
 │   ├── scheduler.ts        scheduled agent runs, mark-to-market
 │   ├── alerts.ts           alert feed + Telegram
 │   ├── routes.ts           REST API
@@ -222,7 +232,7 @@ Any Node 22 host works (Render, Fly, Railway):
 
 - **Build:** `npm ci && npm run build`
 - **Start:** `npm start`
-- **Environment:** `CMC_API_KEY`, `ADMIN_TOKEN`, and optionally `ANTHROPIC_API_KEY`
+- **Environment:** `CMC_API_KEY` and `ADMIN_TOKEN`
 - **Storage:** attach a persistent disk for `DATA_DIR` so the portfolio survives redeploys
 
 ## Docs

@@ -132,3 +132,27 @@ test("mock layer answers every endpoint the app uses in the documented shape", (
   assert.equal(h.data.rwa_assets[0].quotes.length, 30);
   assert.ok(mockResponse("/v1/global-metrics/quotes/latest", {}));
 });
+
+test("agent: market regime scales sizing and blocks momentum buys when risk-off", async () => {
+  const { regimeFrom, STYLE_SIGNALS } = await import("../server/agent/strategy.ts");
+  assert.equal(regimeFrom(-4).regime, "risk-off");
+  assert.equal(regimeFrom(-4).sizeMult, 0.5);
+  assert.equal(regimeFrom(3).regime, "risk-on");
+  assert.equal(regimeFrom(0.3).regime, "neutral");
+  assert.equal(regimeFrom(null).regime, "neutral");
+  assert.deepEqual(STYLE_SIGNALS.value, ["DISCOUNT", "REBOUND"]);
+});
+
+test("agent: volatility-targeted sizing and 30-day history stats", async () => {
+  const { volTargetSize, historyStats } = await import("../server/agent/strategy.ts");
+  assert.equal(volTargetSize(10_000, 2), 10_000); // at target
+  assert.equal(volTargetSize(10_000, 4), 5_000); // twice as volatile -> half size
+  assert.equal(volTargetSize(10_000, 0.5), 15_000); // capped at 1.5x
+  assert.equal(volTargetSize(10_000, 20), 4_000); // floored at 0.4x
+  assert.equal(volTargetSize(10_000, null), 10_000);
+  const st = historyStats([100, 110, 99, 120, 90]);
+  assert.ok(Math.abs(st.ret30! - -10) < 1e-9);
+  assert.ok(Math.abs(st.drawdown! - -25) < 1e-9);
+  assert.ok(st.dailyVol! > 0);
+  assert.equal(historyStats([1, 2]).dailyVol, null);
+});

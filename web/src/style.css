@@ -125,7 +125,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .step { border-left: 3px solid var(--border); padding: 4px 0 4px 12px; }
 .step.order { border-color: var(--series-1); }
 .step.error { border-color: var(--critical); }
-.step.text { border-color: var(--good); }
+.step.text, .step.thinking { border-color: var(--good); }
 .step .t { font-size: 11px; color: var(--text-muted); }
 .step pre, pre.code { white-space: pre-wrap; word-break: break-word; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-2); padding: 8px 10px; border-radius: 8px; margin: 6px 0 0; max-height: 260px; overflow: auto; }
 details summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; }

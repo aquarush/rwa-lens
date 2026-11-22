@@ -2,7 +2,7 @@
  * Paper-trading engine. No real orders are ever sent anywhere: fills are
  * simulated at the latest CMC price with a fee and a liquidity-based
  * slippage model. Every order passes the same risk checks whoever placed it
- * (Claude, the rule-based strategy, or the user).
+ * (the agent, the MCP server, or the user).
  */
 import crypto from "node:crypto";
 import type { ScreenRow } from "./screener.ts";

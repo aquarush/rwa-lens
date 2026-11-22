@@ -1,6 +1,5 @@
 /**
- * Trading tools shared by both engines (Claude tool use and the rule-based
- * strategy) and by the MCP server. Each returns plain JSON-able data.
+ * Trading tools shared by the agent's strategy and the MCP server. Each returns plain JSON-able data.
  */
 import { assetHistory, marketPairs } from "../rwa.ts";
 import { filterRows, marketOverview, type ScreenRow, type Signal } from "../screener.ts";

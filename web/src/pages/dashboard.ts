@@ -15,7 +15,7 @@ export async function renderDashboard(app: HTMLElement, token: number) {
   app.innerHTML = `
     ${status?.mode === "mock" ? `<div class="banner">Mock mode: no CMC_API_KEY is set, so prices are synthetic or replayed from recorded fixtures. Add a key to .env for live data.</div>` : ""}
     <h1>Dashboard</h1>
-    <p class="sub">Tokenized real-world assets on CoinMarketCap, and your AI-managed paper portfolio. Updated ${ago(ov.at)}.</p>
+    <p class="sub">Tokenized real-world assets on CoinMarketCap, and your agent-managed paper portfolio. Updated ${ago(ov.at)}.</p>
 
     <div class="tiles">
       <div class="card tile"><div class="label">Tokenized RWA market cap <span class="muted">(top ${ov.rwa.assets} assets)</span></div><div class="value">${usd(ov.rwa.tokenizedMcap, { compact: true })}</div><div class="delta muted">${usd(ov.rwa.vol24h, { compact: true })} 24h volume</div></div>
@@ -50,7 +50,7 @@ export async function renderDashboard(app: HTMLElement, token: number) {
     <div class="grid cols-2" style="margin-top:16px">
       <div class="card">
         <div class="spread"><h2>Latest agent run</h2><a href="#/agent" class="small">Agent →</a></div>
-        ${lastRun ? `<p class="small muted">${esc(lastRun.engine === "claude" ? `Claude (${lastRun.model})` : "Rule engine")} · ${ago(lastRun.startedAt)} · ${esc(lastRun.status)}</p><p>${esc(lastRun.summary ?? "")}</p>` : `<div class="empty">The agent hasn't run yet. <a href="#/agent">Open the agent</a></div>`}
+        ${lastRun ? `<p class="small muted">${esc(lastRun.strategy ? `${lastRun.strategy} strategy` : "Agent")} · ${ago(lastRun.startedAt)} · ${esc(lastRun.status)}</p><p>${esc(lastRun.summary ?? "")}</p>` : `<div class="empty">The agent hasn't run yet. <a href="#/agent">Open the agent</a></div>`}
       </div>
       <div class="card">
         <div class="spread"><h2>Recent alerts</h2><a href="#/alerts" class="small">All →</a></div>
