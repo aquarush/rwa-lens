@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { jsonStore } from "../store.ts";
 
 export type StepType = "info" | "thinking" | "text" | "tool_call" | "tool_result" | "order" | "error";
@@ -29,7 +28,7 @@ export function startRun(trigger: AgentRun["trigger"], strategy: string): AgentR
   const run: AgentRun = { id: crypto.randomUUID(), trigger, strategy, startedAt: new Date().toISOString(), status: "running", steps: [], orderIds: [] };
   store.update((s) => {
     s.runs.push(run);
-    if (s.runs.length > 200) s.runs.splice(0, s.runs.length - 200);
+    if (s.runs.length > 40) s.runs.splice(0, s.runs.length - 40);
   });
   return run;
 }
@@ -48,12 +47,16 @@ export function save(run: AgentRun) {
 
 export const listRuns = (limit = 30) => store.get().runs.slice(-limit).reverse().map(({ steps, ...r }) => ({ ...r, stepCount: steps.length }));
 export const getRun = (id: string) => store.get().runs.find((r) => r.id === id) ?? null;
-export const isRunning = () => store.get().runs.some((r) => r.status === "running");
+/** A run left "running" for over 10 minutes was interrupted (restart, platform time limit). */
+const STALE_MS = 10 * 60_000;
+export const isRunning = () => store.get().runs.some((r) => r.status === "running" && Date.now() - Date.parse(r.startedAt) < STALE_MS);
 
 /** Runs left "running" by a crash/restart are closed on startup. */
-export function closeStaleRuns() {
+export function closeStaleRuns(olderThanMs = 0) {
+  const stale = store.get().runs.some((r) => r.status === "running" && Date.now() - Date.parse(r.startedAt) >= olderThanMs);
+  if (!stale) return;
   store.update((s) => {
-    for (const r of s.runs) if (r.status === "running") {
+    for (const r of s.runs) if (r.status === "running" && Date.now() - Date.parse(r.startedAt) >= olderThanMs) {
       r.status = "error";
       r.summary = "interrupted (server restarted)";
       r.finishedAt = new Date().toISOString();

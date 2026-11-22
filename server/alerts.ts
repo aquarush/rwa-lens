@@ -2,8 +2,7 @@
  * Alerts feed (in-app) with optional Telegram delivery. De-duplicates per key
  * so a token sitting off-peg doesn't spam every refresh.
  */
-import crypto from "node:crypto";
-import { config } from "./config.ts";
+import { background, config } from "./config.ts";
 import type { ScreenRow } from "./screener.ts";
 import { jsonStore } from "./store.ts";
 
@@ -11,7 +10,6 @@ export interface Alert { id: string; at: string; kind: "depeg" | "trade" | "risk
 
 const store = jsonStore<{ alerts: Alert[]; lastByKey: Record<string, number> }>("alerts.json", () => ({ alerts: [], lastByKey: {} }));
 const DEDUPE_MS = 6 * 3600_000;
-export const DEPEG_ALERT_PCT = Number(process.env.DEPEG_ALERT_PCT ?? 1.5);
 
 async function telegram(text: string) {
   if (!config.telegramToken || !config.telegramChat) return;
@@ -34,15 +32,15 @@ export function pushAlert(kind: Alert["kind"], key: string, title: string, detai
   store.update((st) => {
     st.alerts.push(a);
     st.lastByKey[key] = Date.now();
-    if (st.alerts.length > 500) st.alerts = st.alerts.slice(-500);
+    if (st.alerts.length > 150) st.alerts = st.alerts.slice(-150);
   });
-  void telegram(`RWA Lens · ${title}${detail ? `\n${detail}` : ""}`);
+  background(telegram(`RWA Lens · ${title}${detail ? `\n${detail}` : ""}`));
   return a;
 }
 
 export function scanDepegs(rows: ScreenRow[]) {
   for (const r of rows) {
-    if (!r.tradable || r.premiumPct == null || Math.abs(r.premiumPct) < DEPEG_ALERT_PCT) continue;
+    if (!r.tradable || r.premiumPct == null || Math.abs(r.premiumPct) < config.depegAlertPct) continue;
     const dir = r.premiumPct > 0 ? "premium" : "discount";
     pushAlert(
       "depeg",

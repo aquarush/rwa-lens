@@ -17,21 +17,26 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "prepare": "git config core.hooksPath .githooks || true",
-    "check:secrets": "node scripts/check-secrets.mjs"
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "build:cf": "vite build && node scripts/build-cloudflare.mjs",
+    "cf:dev": "wrangler pages dev dist-cf --d1 DB --port 8788",
+    "cf:deploy": "wrangler pages deploy dist-cf"
   },
   "dependencies": {
-    "@fastify/static": "^10.1.12",
+    "@hono/node-server": "^2.1.11",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "dotenv": "^18.0.10",
-    "fastify": "^5.12.8",
+    "hono": "^4.13.20",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "chart.js": "^4.6.1",
     "concurrently": "^10.0.7",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.8"
+    "vite": "^8.3.8",
+    "wrangler": "^4.166.0"
   }
 }

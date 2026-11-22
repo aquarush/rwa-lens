@@ -34,7 +34,7 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 - [MCP server (optional)](#mcp-server-optional)
 - [Configuration](#configuration)
 - [Project structure](#project-structure)
-- [Deploying](#deploying)
+- [Deploying (Cloudflare Pages or Node)](#deploying)
 - [Docs](#docs)
 
 ## Screenshots
@@ -75,16 +75,18 @@ npm run build            # build the web UI
 npm start                # → http://localhost:8787
 ```
 
-**No key? It still runs.** No `CMC_API_KEY` means **mock mode**. It replays real responses from `fixtures/recorded/` (create them with `npm run record`), or falls back to a clearly labelled synthetic market in the documented response shapes.
+**No key? It still runs.** No `CMC_API_KEY` means **mock mode**. It replays a real market snapshot from `fixtures/recorded/` (create one with `npm run record`), or falls back to a clearly labelled synthetic market in the documented response shapes.
 
 | Script | |
 |---|---|
 | `npm run dev` | API with hot reload on :8787, plus the UI dev server on :5173 (proxies `/api`) |
 | `npm run build` / `npm start` | Production build, served by the API server |
-| `npm test` | 11 tests: peer pricing, unit mismatch, risk engine, fills, approvals, stop-loss, kill switch, agent regime and sizing, mock shapes. They use a temp data dir and spend no credits |
+| `npm test` | 12 tests: peer pricing, unit mismatch, risk engine, fills, approvals, stop-loss, kill switch, agent regime and sizing, Cloudflare persistence, mock shapes. They use a temp data dir and spend no credits |
 | `npm run typecheck` | `tsc --noEmit` across server, web, MCP and tests |
 | `npm run mcp` | Run the MCP server on stdio |
-| `npm run record [n]` | Record real responses for the top *n* assets into `fixtures/recorded/` for mock mode (~65 credits for n = 10) |
+| `npm run record [n]` | Record real responses for the top *n* assets into `fixtures/recorded/` so mock mode replays real data (~57 credits for n = 10) |
+| `npm run build:cf` | Build for Cloudflare Pages: `dist-cf/` and `rwa-lens-cloudflare-pages.zip` |
+| `npm run cf:dev` / `npm run cf:deploy` | Run the Cloudflare build locally (Wrangler + local D1) / deploy it with Wrangler |
 
 ## CoinMarketCap endpoints used
 
@@ -191,7 +193,7 @@ All settings go in `.env` (see [`.env.example`](.env.example)). Agent and risk s
 | `MTM_INTERVAL_MIN` | `10` | Position re-pricing interval |
 | `DEPEG_ALERT_PCT` | `1.5` | |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | – | Optional alert delivery |
-| `DATA_DIR` | `./data` | Portfolio, settings, journal, alerts (JSON) |
+| `DATA_DIR` | `./data` | Node only: portfolio, settings, journal, alerts (JSON). Cloudflare uses the D1 binding `DB` |
 | `PORT` | `8787` | |
 
 ### Keeping keys safe
@@ -205,7 +207,7 @@ All settings go in `.env` (see [`.env.example`](.env.example)). Agent and risk s
 
 ```
 rwa-lens/
-├── server/                 Fastify API, data layer, paper engine
+├── server/                 API (Hono), data layer, paper engine: runs on Node and Cloudflare
 │   ├── cmc.ts              CMC client: cache, evidence log, credit budget, mock switch
 │   ├── mock.ts             recorded-fixture replay + synthetic market (no key)
 │   ├── rwa.ts              endpoint wrappers, live-data clean-up
@@ -215,12 +217,14 @@ rwa-lens/
 │   ├── agent/              strategy.ts (decision loop) · tools.ts · journal.ts · run.ts
 │   ├── scheduler.ts        scheduled agent runs, mark-to-market
 │   ├── alerts.ts           alert feed + Telegram
-│   ├── routes.ts           REST API
-│   └── index.ts            entry point
+│   ├── app.ts              REST API (Hono)
+│   ├── store.ts            JSON documents: files on Node, D1 on Cloudflare
+│   ├── index.ts            Node entry · node/bootstrap.ts (env, files, evidence log)
+│   └── worker.ts           Cloudflare Pages entry (_worker.js)
 ├── web/                    Vite + TypeScript + Chart.js single-page app
 │   └── src/pages/          dashboard · screener · asset · agent · portfolio · issuers · alerts/evidence
 ├── mcp/server.ts           MCP server (stdio)
-├── scripts/               record-fixtures.ts · check-secrets.mjs (secret guard)
+├── scripts/               build-cloudflare.mjs · record-fixtures.ts · check-secrets.mjs (secret guard)
 ├── .githooks/pre-commit    runs the secret guard on every commit
 ├── test/core.test.ts       node:test suite
 └── docs/                   architecture, API feedback, demo script, screenshots, evidence sample
@@ -228,17 +232,28 @@ rwa-lens/
 
 ## Deploying
 
-Any Node 22 host works (Render, Fly, Railway):
+### Cloudflare Pages (recommended, free tier)
+
+```bash
+npm run build:cf     # → rwa-lens-cloudflare-pages.zip
+```
+
+Drag the zip into *Workers & Pages → Create → Pages → Upload assets*. Then add `CMC_API_KEY` and `ADMIN_TOKEN` as secrets, bind a D1 database as `DB`, and upload the zip once more. **Step-by-step guide: [docs/DEPLOY_CLOUDFLARE.md](docs/DEPLOY_CLOUDFLARE.md).**
+
+The API runs as an advanced-mode `_worker.js`: the same Hono app as the Node server, with state in D1 and no Node built-ins. Scheduled agent runs trigger from page activity, or from an external cron hitting `POST /api/cron`.
+
+### Any Node 22 host (Render, Fly, Railway, a VPS)
 
 - **Build:** `npm ci && npm run build`
 - **Start:** `npm start`
 - **Environment:** `CMC_API_KEY` and `ADMIN_TOKEN`
-- **Storage:** attach a persistent disk for `DATA_DIR` so the portfolio survives redeploys
+- **Storage:** attach a persistent disk for `DATA_DIR`
 
 ## Docs
 
 - [Architecture](docs/ARCHITECTURE.md): data flow, peer pricing, signals, paper engine, agent, credit discipline, security
 - [API feedback](docs/API_FEEDBACK.md): what the CMC API made possible and where it got in the way
+- [Deploy to Cloudflare Pages](docs/DEPLOY_CLOUDFLARE.md): zip upload, D1, secrets, cron
 - [Demo script](docs/DEMO.md): video walkthrough and submission checklist
 
 ## License

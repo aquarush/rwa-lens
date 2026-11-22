@@ -1,17 +1,22 @@
 /**
  * Mock layer used when no CMC_API_KEY is set.
  *
- * 1. If `npm run record` has saved a real response for the exact request
- *    (fixtures/recorded/<sha1>.json), that is returned.
+ * 1. On Node, if `npm run record` saved a real response for the exact request
+ *    (fixtures/recorded/<sha1>.json), cmc.ts returns that (via hooks.fixture).
  * 2. Otherwise a SYNTHETIC response is generated in the documented response
  *    shape. Prices follow a deterministic, time-based path (sum of sines plus
  *    occasional de-peg events) so the screener, alerts and the paper-trading
  *    agent have something that moves. None of these numbers are real market data.
  */
-import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
-import { config } from "./config.ts";
+/** FNV-1a 32-bit: a tiny deterministic hash that runs anywhere (no Node crypto needed). */
+function fnv(s: string) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
 
 type AssetType = "stock" | "commodity" | "currency" | "government_security" | "etf" | "real_estate";
 
@@ -38,7 +43,7 @@ interface MockAsset {
 }
 
 const ISSUERS: Record<string, { id: string; website: string }> = {};
-const issuerId = (name: string) => crypto.createHash("md5").update(name).digest("hex").slice(0, 24);
+const issuerId = (name: string) => [0, 1, 2].map((i) => fnv(`${i}:${name}`).toString(16).padStart(8, "0")).join("");
 function iss(name: string, website: string) {
   ISSUERS[name] = { id: issuerId(name), website };
   return name;
@@ -90,7 +95,7 @@ export const MOCK_TOKEN_IDS = ALL_TOKENS.map((x) => x.token.cryptoId);
 
 // ---------- deterministic price paths ----------
 function hashNum(s: string) {
-  return crypto.createHash("md5").update(s).digest().readUInt32BE(0) / 0xffffffff;
+  return fnv(s) / 0xffffffff;
 }
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -193,20 +198,7 @@ function paginate<T>(rows: T[], p: Record<string, string>) {
   return { page: rows.slice(start - 1, start - 1 + limit), total: rows.length, hasMore: start - 1 + limit < rows.length };
 }
 
-function recorded(endpoint: string, p: Record<string, string>) {
-  const key = `${endpoint}?${new URLSearchParams(p)}`;
-  const file = path.join(config.fixturesDir, "recorded", crypto.createHash("sha1").update(key).digest("hex") + ".json");
-  if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, "utf8"));
-  return null;
-}
-export function fixtureFileFor(endpoint: string, p: Record<string, string>) {
-  const key = `${endpoint}?${new URLSearchParams(p)}`;
-  return path.join(config.fixturesDir, "recorded", crypto.createHash("sha1").update(key).digest("hex") + ".json");
-}
-
 export function mockResponse(endpoint: string, p: Record<string, string>): unknown {
-  const rec = recorded(endpoint, p);
-  if (rec) return rec;
   const now = Date.now();
 
   switch (endpoint) {

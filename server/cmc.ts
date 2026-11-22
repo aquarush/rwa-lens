@@ -1,16 +1,17 @@
 /**
- * CoinMarketCap Pro API client.
+ * CoinMarketCap Pro API client (platform-neutral: Node and Cloudflare Workers).
  *
  * - Keeps the API key server-side (header X-CMC_PRO_API_KEY).
- * - In-memory TTL cache keyed by path + sorted params, to save credits.
- * - Every LIVE call is appended to evidence/cmc-calls.jsonl with the key redacted.
+ * - In-memory TTL cache keyed by path + sorted params, plus in-flight de-duplication.
+ * - Every LIVE call is recorded with the key redacted: in the evidence store (shown
+ *   on the API Evidence page) and, on Node, appended to evidence/cmc-calls.jsonl.
+ * - A persisted daily credit budget serves stale cache rather than overspending.
  * - With no key, requests are answered by the mock layer (recorded fixtures first,
- *   then a synthetic generator) so the app runs end-to-end for judges.
+ *   then a synthetic generator) so the app runs end-to-end without a key.
  */
-import fs from "node:fs";
-import path from "node:path";
-import { config, mockMode } from "./config.ts";
-import { fixtureFileFor, mockResponse } from "./mock.ts";
+import { config, hooks, mockMode } from "./config.ts";
+import { mockResponse } from "./mock.ts";
+import { jsonStore } from "./store.ts";
 
 export interface CmcStatus {
   timestamp: string;
@@ -53,41 +54,48 @@ export interface CallRecord {
 const cache = new Map<string, { expires: number; value: CmcEnvelope<unknown> }>();
 const inflight = new Map<string, Promise<CmcEnvelope<unknown>>>();
 const recent: CallRecord[] = [];
-const stats = { live: 0, cache: 0, mock: 0, errors: 0, credits: 0, budgetBlocked: 0, since: new Date().toISOString() };
+const stats = { live: 0, cache: 0, mock: 0, errors: 0, credits: 0, budgetBlocked: 0, since: "" };
 
-// ---- daily credit budget (persisted so restarts don't reset it) ----
-const DAILY_BUDGET = Number(process.env.CMC_DAILY_CREDIT_BUDGET ?? 600);
-const creditsFile = () => path.join(config.dataDir, "credits.json");
+// ---- persisted state: daily credit ledger + evidence log ----
 const today = () => new Date().toISOString().slice(0, 10);
-let ledger: { day: string; used: number } = (() => {
-  try {
-    const l = JSON.parse(fs.readFileSync(creditsFile(), "utf8"));
-    return l.day === today() ? l : { day: today(), used: 0 };
-  } catch {
-    return { day: today(), used: 0 };
-  }
-})();
-function readLedger() {
-  try {
-    const l = JSON.parse(fs.readFileSync(creditsFile(), "utf8"));
-    if (l.day === today()) return l as typeof ledger;
-  } catch {}
-  return { day: today(), used: 0 };
-}
+const ledger = jsonStore<{ day: string; used: number }>("credits.json", () => ({ day: "", used: 0 }));
+const evidence = jsonStore<{ calls: Record<string, unknown>[] }>("evidence.json", () => ({ calls: [] }));
+
 function spend(credits: number) {
-  // re-read first: the MCP server and the web app may both be spending
-  ledger = readLedger();
-  ledger.used += credits;
-  try {
-    fs.mkdirSync(config.dataDir, { recursive: true });
-    fs.writeFileSync(creditsFile(), JSON.stringify(ledger));
-  } catch {}
+  ledger.update((l) => {
+    if (l.day !== today()) {
+      l.day = today();
+      l.used = 0;
+    }
+    l.used += credits;
+  });
 }
 export const budget = () => {
-  ledger = readLedger();
-  return { day: ledger.day, used: ledger.used, limit: DAILY_BUDGET, remaining: Math.max(0, DAILY_BUDGET - ledger.used) };
+  const l = ledger.get();
+  const used = l.day === today() ? l.used : 0;
+  return { day: today(), used, limit: config.dailyCreditBudget, remaining: Math.max(0, config.dailyCreditBudget - used) };
 };
-const RECORD = process.env.CMC_RECORD === "1";
+
+function remember(rec: CallRecord) {
+  recent.unshift(rec);
+  if (recent.length > 200) recent.pop();
+}
+
+function writeEvidence(rec: CallRecord, body: unknown) {
+  const text = JSON.stringify(body);
+  const line = {
+    ...rec,
+    url: `${config.cmcBase}${rec.endpoint}?${new URLSearchParams(rec.params)}`,
+    headers: { "X-CMC_PRO_API_KEY": "<redacted>" },
+    responseBytes: text.length,
+    responsePreview: text.slice(0, 1200),
+  };
+  evidence.update((e) => {
+    e.calls.push(line);
+    if (e.calls.length > 60) e.calls = e.calls.slice(-60);
+  });
+  hooks.evidence?.(line);
+}
 
 function cleanParams(params: Params): Record<string, string> {
   const out: Record<string, string> = {};
@@ -97,28 +105,6 @@ function cleanParams(params: Params): Record<string, string> {
     out[k] = String(v);
   }
   return out;
-}
-
-function remember(rec: CallRecord) {
-  recent.unshift(rec);
-  if (recent.length > 200) recent.pop();
-}
-
-function writeEvidence(rec: CallRecord, body: unknown) {
-  try {
-    fs.mkdirSync(config.evidenceDir, { recursive: true });
-    const text = JSON.stringify(body);
-    const line = JSON.stringify({
-      ...rec,
-      url: `${config.cmcBase}${rec.endpoint}?${new URLSearchParams(rec.params)}`,
-      headers: { "X-CMC_PRO_API_KEY": "<redacted>" },
-      responseBytes: text.length,
-      responsePreview: text.slice(0, 1500),
-    });
-    fs.appendFileSync(path.join(config.evidenceDir, "cmc-calls.jsonl"), line + "\n");
-  } catch (err) {
-    console.warn("[cmc] could not write evidence:", (err as Error).message);
-  }
 }
 
 /** Default cache TTLs mirror CMC's own server-side cache intervals. */
@@ -133,6 +119,7 @@ export async function cmcGet<T>(
   params: Params = {},
   opts: { ttlMs?: number; force?: boolean } = {},
 ): Promise<CmcEnvelope<T>> {
+  stats.since ||= new Date().toISOString();
   const p = cleanParams(params);
   const key = `${endpoint}?${new URLSearchParams(p)}`;
   const ttl = opts.ttlMs ?? TTL.short;
@@ -148,7 +135,7 @@ export async function cmcGet<T>(
   const run = (async () => {
     const started = Date.now();
     if (mockMode()) {
-      const body = mockResponse(endpoint, p) as CmcEnvelope<T>;
+      const body = ((hooks.fixture?.(key) as CmcEnvelope<T> | null) ?? mockResponse(endpoint, p)) as CmcEnvelope<T>;
       stats.mock++;
       if (String(body.status?.error_code ?? 0) !== "0") {
         throw new CmcError(`CMC(mock) ${endpoint} failed: ${body.status.error_message}`, 400, body.status.error_code, endpoint);
@@ -161,7 +148,7 @@ export async function cmcGet<T>(
     if (budget().remaining <= 0 && endpoint !== "/v1/key/info") {
       stats.budgetBlocked++;
       if (hit) return hit.value as CmcEnvelope<T>; // serve stale rather than overspend
-      throw new CmcError(`Daily CMC credit budget (${DAILY_BUDGET}) exhausted; raise CMC_DAILY_CREDIT_BUDGET to continue`, 429, "budget", endpoint);
+      throw new CmcError(`Daily CMC credit budget (${config.dailyCreditBudget}) exhausted; raise CMC_DAILY_CREDIT_BUDGET to continue`, 429, "budget", endpoint);
     }
     const url = `${config.cmcBase}${endpoint}?${new URLSearchParams(p)}`;
     let res: Response;
@@ -178,15 +165,7 @@ export async function cmcGet<T>(
     }
     const body = (await res.json().catch(() => ({}))) as Partial<CmcEnvelope<T>>;
     const credits = Number(body.status?.credit_count ?? 0);
-    const rec: CallRecord = {
-      at: new Date().toISOString(),
-      endpoint,
-      params: p,
-      source: "live",
-      httpStatus: res.status,
-      credits,
-      elapsedMs: Date.now() - started,
-    };
+    const rec: CallRecord = { at: new Date().toISOString(), endpoint, params: p, source: "live", httpStatus: res.status, credits, elapsedMs: Date.now() - started };
     stats.live++;
     stats.credits += credits;
     spend(credits);
@@ -194,18 +173,14 @@ export async function cmcGet<T>(
     const errorCode = body.status?.error_code ?? (res.ok ? 0 : res.status);
     if (!res.ok || String(errorCode) !== "0") {
       stats.errors++;
-      rec.error = body.status?.error_message ?? `HTTP ${res.status}`;
+      rec.error = body.status?.error_message || `HTTP ${res.status}`;
       remember(rec);
       writeEvidence(rec, body);
       throw new CmcError(`CMC ${endpoint} failed: ${rec.error}`, res.status, errorCode, endpoint);
     }
     remember(rec);
     writeEvidence(rec, body);
-    if (RECORD) {
-      const file = fixtureFileFor(endpoint, p);
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, JSON.stringify(body));
-    }
+    hooks.record?.(key, body);
     const value = body as CmcEnvelope<T>;
     cache.set(key, { expires: Date.now() + ttl, value });
     return value;
@@ -223,9 +198,4 @@ export function cmcStats() {
   return { mode: mockMode() ? "mock" : "live", ...stats, budget: budget(), cacheEntries: cache.size, recent: recent.slice(0, 50) };
 }
 
-export function readEvidence(limit = 50): unknown[] {
-  const file = path.join(config.evidenceDir, "cmc-calls.jsonl");
-  if (!fs.existsSync(file)) return [];
-  const lines = fs.readFileSync(file, "utf8").trim().split("\n").filter(Boolean);
-  return lines.slice(-limit).reverse().map((l) => JSON.parse(l));
-}
+export const readEvidence = (limit = 50) => evidence.get().calls.slice(-limit).reverse();

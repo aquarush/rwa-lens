@@ -1,28 +1,39 @@
 /**
- * Background jobs:
- *  - mark-to-market every MTM_INTERVAL_MIN (default 10) while positions are open.
- *    Only the held tokens are re-quoted (1 credit per 100 tokens), so this is cheap.
- *  - the agent every settings.intervalMin when the scheduler is enabled.
+ * Background jobs, platform-neutral:
+ *  - mark-to-market every MTM_INTERVAL_MIN while positions are open. Only the held
+ *    tokens are re-quoted (1 credit per 100 tokens), so this is cheap.
+ *  - the agent every settings.intervalMin when scheduling is enabled.
+ *
+ * Node calls tick() from a 60-second timer. Cloudflare has no long-running timers,
+ * so the worker calls tick() after requests (the UI polls /api/status every 15s)
+ * and from POST /api/cron, which an external cron can hit.
  */
 import { pushAlert } from "./alerts.ts";
 import { runAgent } from "./agent/run.ts";
 import { isRunning } from "./agent/journal.ts";
+import { config } from "./config.ts";
 import { markToMarket, portfolioSummary } from "./portfolio.ts";
 import { cryptoQuotes } from "./rwa.ts";
 import { lastSnapshotRows, type ScreenRow } from "./screener.ts";
 import { getSettings } from "./settings.ts";
+import { jsonStore } from "./store.ts";
 
-const MTM_MIN = Number(process.env.MTM_INTERVAL_MIN ?? 10);
-let lastAgentAt = 0;
-export const schedulerState = {
-  lastMtmAt: null as string | null,
-  lastAgentAt: null as string | null,
-  nextAgentAt: null as string | null,
-  lastError: null as string | null,
-};
+const state = jsonStore<{ lastMtmAt: string | null; lastAgentAt: string | null; lastError: string | null }>("scheduler.json", () => ({
+  lastMtmAt: null,
+  lastAgentAt: null,
+  lastError: null,
+}));
+
+export function schedulerStatus() {
+  const s = state.get();
+  const set = getSettings();
+  const base = s.lastAgentAt ? Date.parse(s.lastAgentAt) : Date.now();
+  return { ...s, nextAgentAt: set.agentEnabled ? new Date(base + set.intervalMin * 60_000).toISOString() : null };
+}
 
 export async function quickMarkToMarket() {
   const held = portfolioSummary().positions;
+  state.update((s) => (s.lastMtmAt = new Date().toISOString()));
   if (!held.length) return [];
   const quotes = await cryptoQuotes(held.map((p) => p.cryptoId));
   const rows = new Map<number, ScreenRow>(lastSnapshotRows().map((r) => [r.cryptoId, r]));
@@ -38,31 +49,41 @@ export async function quickMarkToMarket() {
   }
   const exits = markToMarket(rows);
   for (const o of exits) pushAlert("risk", `exit:${o.id}`, `${o.reason.split(":")[0]} ${o.symbol}: ${o.status}`, o.reason, false);
-  schedulerState.lastMtmAt = new Date().toISOString();
   return exits;
 }
 
-async function tick() {
-  try {
-    const s = getSettings();
-    if (s.agentEnabled && !s.killSwitch && !isRunning() && Date.now() - lastAgentAt >= s.intervalMin * 60_000) {
-      lastAgentAt = Date.now();
-      schedulerState.lastAgentAt = new Date().toISOString();
-      const run = await runAgent("schedule");
-      pushAlert("agent", `run:${run.id}`, `Agent run ${run.status} (${run.strategy})`, run.summary, false);
-    } else if (!schedulerState.lastMtmAt || Date.now() - Date.parse(schedulerState.lastMtmAt) >= MTM_MIN * 60_000) {
-      await quickMarkToMarket();
-    }
-    schedulerState.nextAgentAt = s.agentEnabled ? new Date(lastAgentAt + s.intervalMin * 60_000).toISOString() : null;
-    schedulerState.lastError = null;
-  } catch (err) {
-    schedulerState.lastError = (err as Error).message;
-    console.warn("[scheduler]", (err as Error).message);
-  }
+/** Is a scheduled job due? Cheap: reads settings and timestamps only. */
+export function jobDue(): "agent" | "mtm" | null {
+  const set = getSettings();
+  const s = state.get();
+  const since = (iso: string | null) => (iso ? Date.now() - Date.parse(iso) : Infinity);
+  if (set.agentEnabled && !set.killSwitch && !isRunning() && since(s.lastAgentAt) >= set.intervalMin * 60_000) return "agent";
+  if (portfolioSummary().positions.length && since(s.lastMtmAt) >= config.mtmIntervalMin * 60_000) return "mtm";
+  return null;
 }
 
+/** Run whatever is due (at most one job). */
+export async function tick() {
+  const job = jobDue();
+  if (!job) return null;
+  try {
+    if (job === "agent") {
+      state.update((s) => (s.lastAgentAt = new Date().toISOString()));
+      const run = await runAgent("schedule");
+      pushAlert("agent", `run:${run.id}`, `Agent run ${run.status} (${run.strategy})`, run.summary, false);
+    } else {
+      await quickMarkToMarket();
+    }
+    state.update((s) => (s.lastError = null));
+  } catch (err) {
+    state.update((s) => (s.lastError = (err as Error).message));
+    console.warn("[scheduler]", (err as Error).message);
+  }
+  return job;
+}
+
+/** Node: a 60-second timer. The first scheduled agent run waits one full interval after start. */
 export function startScheduler() {
-  // the first scheduled agent run waits one full interval, so restarts don't trigger trades
-  lastAgentAt = Date.now();
-  setInterval(tick, 60_000).unref();
+  state.update((s) => (s.lastAgentAt = new Date().toISOString()));
+  setInterval(() => void tick(), 60_000).unref?.();
 }

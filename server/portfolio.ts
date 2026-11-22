@@ -4,8 +4,8 @@
  * slippage model. Every order passes the same risk checks whoever placed it
  * (the agent, the MCP server, or the user).
  */
-import crypto from "node:crypto";
 import type { ScreenRow } from "./screener.ts";
+import { config } from "./config.ts";
 import { getSettings, type Settings } from "./settings.ts";
 import { jsonStore } from "./store.ts";
 
@@ -61,20 +61,19 @@ interface PortfolioState {
   createdAt: string;
 }
 
-const START = Number(process.env.PAPER_STARTING_CASH ?? 100_000);
 const fresh = (): PortfolioState => ({
-  startingCash: START,
-  cash: START,
+  startingCash: config.paperStartingCash,
+  cash: config.paperStartingCash,
   realizedPnl: 0,
   feesPaid: 0,
   positions: {},
   orders: [],
-  equity: [{ t: new Date().toISOString(), equity: START, cash: START }],
+  equity: [{ t: new Date().toISOString(), equity: config.paperStartingCash, cash: config.paperStartingCash }],
   createdAt: new Date().toISOString(),
 });
 const store = jsonStore<PortfolioState>("portfolio.json", fresh);
 
-export function resetPortfolio(startingCash = START) {
+export function resetPortfolio(startingCash = config.paperStartingCash) {
   store.set({ ...fresh(), startingCash, cash: startingCash, equity: [{ t: new Date().toISOString(), equity: startingCash, cash: startingCash }] });
 }
 
@@ -226,7 +225,7 @@ export function placeOrder(req: OrderRequest, row: ScreenRow | undefined, opts: 
   else if (opts.pending) order = { ...base, status: "pending" };
   else order = fill(req, row, base);
   s.orders.push(order);
-  if (s.orders.length > 2000) s.orders.splice(0, s.orders.length - 2000);
+  if (s.orders.length > 500) s.orders.splice(0, s.orders.length - 500);
   store.set(s);
   return order;
 }
@@ -287,7 +286,7 @@ export function markToMarket(rows: Map<number, ScreenRow>): Order[] {
     // keep at most one point per 5 minutes
     if (last && st.equity.length > 1 && Date.now() - Date.parse(last.t) < 5 * 60_000) st.equity[st.equity.length - 1] = { t: now, equity: sum.equity, cash: sum.cash };
     else st.equity.push({ t: now, equity: sum.equity, cash: sum.cash });
-    if (st.equity.length > 5000) st.equity.splice(0, st.equity.length - 5000);
+    if (st.equity.length > 1500) st.equity.splice(0, st.equity.length - 1500);
   });
   return exits;
 }

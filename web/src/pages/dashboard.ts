@@ -14,6 +14,7 @@ export async function renderDashboard(app: HTMLElement, token: number) {
 
   app.innerHTML = `
     ${status?.mode === "mock" ? `<div class="banner">Mock mode: no CMC_API_KEY is set, so prices are synthetic or replayed from recorded fixtures. Add a key to .env for live data.</div>` : ""}
+    ${status && !status.persistent ? `<div class="banner">No D1 database is bound to this Cloudflare Pages project, so the portfolio, settings and agent journal live in memory and will reset. Add a D1 binding named <code>DB</code> (Settings → Bindings) and redeploy.</div>` : ""}
     <h1>Dashboard</h1>
     <p class="sub">Tokenized real-world assets on CoinMarketCap, and your agent-managed paper portfolio. Updated ${ago(ov.at)}.</p>
 

@@ -11,6 +11,7 @@ import path from "node:path";
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "rwa-lens-test-"));
 process.env.CMC_API_KEY = "";
 
+await import("../server/node/bootstrap.ts");
 const { scoreTokens } = await import("../server/screener.ts");
 const portfolio = await import("../server/portfolio.ts");
 const { updateSettings, DEFAULT_SETTINGS } = await import("../server/settings.ts");
@@ -155,4 +156,32 @@ test("agent: volatility-targeted sizing and 30-day history stats", async () => {
   assert.ok(Math.abs(st.drawdown! - -25) < 1e-9);
   assert.ok(st.dailyVol! > 0);
   assert.equal(historyStats([1, 2]).dailyVol, null);
+});
+
+test("cloudflare store: hydrate, mutate, flush only changed documents", async () => {
+  const store = await import("../server/store.ts");
+  // simulate the worker: deferred backend, state loaded from D1 rows
+  const docA = store.jsonStore("test-a.json", () => ({ n: 0, tag: "init" }));
+  const docB = store.jsonStore("test-b.json", () => ({ items: [] as number[] }));
+  store.setStoreBackend({ kind: "deferred" });
+  try {
+    store.hydrate(new Map([["test-a.json", JSON.stringify({ n: 5 })]]));
+    assert.deepEqual(docA.get(), { n: 5, tag: "init" }, "stored values merge over defaults");
+    assert.deepEqual(docB.get(), { items: [] }, "missing documents start from defaults");
+    docA.update((s) => (s.n += 1));
+    const dirty = store.takeDirty().filter((d) => d.name.startsWith("test-"));
+    assert.deepEqual(dirty.map((d) => d.name), ["test-a.json"], "only the changed document is written back");
+    assert.equal(JSON.parse(dirty[0].text).n, 6);
+    assert.equal(store.takeDirty().filter((d) => d.name.startsWith("test-")).length, 0, "flush clears the dirty flag");
+  } finally {
+    // restore the file backend for the remaining tests
+    const { DATA_DIR } = await import("../server/node/bootstrap.ts");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    store.setStoreBackend({
+      kind: "sync",
+      read: (n) => { try { return fs.readFileSync(path.join(DATA_DIR, n), "utf8"); } catch { return null; } },
+      write: (n, t) => { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(path.join(DATA_DIR, n), t); },
+    });
+  }
 });

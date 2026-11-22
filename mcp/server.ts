@@ -7,6 +7,7 @@
  * Portfolio tools go through the app's HTTP API (RWA_LENS_URL, default
  * http://localhost:8787) so the app remains the single owner of portfolio state.
  */
+import "../server/node/bootstrap.ts"; // first: loads .env and file storage
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";

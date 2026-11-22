@@ -11,6 +11,8 @@ import { renderAlerts, renderEvidence } from "./pages/misc";
 export interface Status {
   mode: "live" | "mock";
   strategy: string;
+  platform: "node" | "cloudflare";
+  persistent: boolean;
   adminRequired: boolean;
   agentRunning: boolean;
   scheduler: { lastMtmAt: string | null; lastAgentAt: string | null; nextAgentAt: string | null; lastError: string | null };
@@ -33,7 +35,8 @@ async function refreshStatus() {
       <div><span class="dot ${status.mode}"></span> CMC ${status.mode === "live" ? "live data" : "mock data"}</div>
       <div>Agent: ${status.strategy} strategy${status.agentRunning ? " · running…" : ""}</div>
       <div>Credits today: ${b.used}/${b.limit}</div>
-      <div>Paper trading only</div>`;
+      <div>Paper trading only</div>
+      ${status.persistent ? "" : `<div class="down">Storage not persistent</div>`}`;
   } catch {
     document.getElementById("status-pill")!.innerHTML = `<div class="down">API offline</div>`;
   }

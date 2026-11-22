@@ -21,3 +21,5 @@ jobs:
       # tests force mock mode and a temp data dir: no API keys or credits needed
       - run: npm test
       - run: npm run build
+      # bundles the Cloudflare worker with no Node built-ins allowed
+      - run: npm run build:cf

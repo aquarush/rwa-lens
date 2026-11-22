@@ -14,3 +14,11 @@ web/dist/
 *.pem
 *.key
 .claude/settings.local.json
+dist-cf/
+rwa-lens-cloudflare-pages.zip
+.wrangler/
+.dev.vars
+
+# real CMC snapshot for mock mode (npm run record). Not committed by default:
+# check CoinMarketCap's terms before publishing their data in a public repo.
+fixtures/recorded/

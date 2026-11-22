@@ -40,8 +40,9 @@ Added at the user's request: an **AI agent that trades** (paper only: CMC has no
 - [x] Agent: rule-based decision loop on CMC data only (regime → review → screen → research → vol-targeted sizing), journal, scheduler, alerts (+Telegram). The Claude/LLM engine was removed by request: no external AI service
 - [x] Web UI: dashboard, screener, asset detail, agent console, portfolio, issuers, alerts, API evidence
 - [x] MCP server (7 tools), tests, README, docs/API_FEEDBACK.md
-- [ ] `npm run record` for a real mock snapshot (~65 credits); decide whether to commit fixtures
-- [ ] Deploy with ADMIN_TOKEN set, demo video, X post, DoraHacks submission
+- [x] `npm run record`: real snapshot recorded locally (57 credits); fixtures/recorded/ is gitignored until we decide on CMC data redistribution
+- [x] Cloudflare Pages build: `npm run build:cf` → zip with `_worker.js` (Hono API, D1 storage), verified in `wrangler pages dev`
+- [ ] Deploy to Cloudflare Pages (docs/DEPLOY_CLOUDFLARE.md) with ADMIN_TOKEN + D1 binding, demo video, X post, DoraHacks submission
 
 ## Order of work (original)
 1. Read the RWA docs and record real responses into `fixtures/` → **day 1**

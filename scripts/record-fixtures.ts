@@ -9,7 +9,7 @@
  */
 export {};
 process.env.CMC_RECORD = "1";
-const { config } = await import("../server/config.ts");
+const { config } = await import("../server/node/bootstrap.ts");
 if (!config.cmcKey) {
   console.error("CMC_API_KEY is not set; nothing to record.");
   process.exit(1);
@@ -23,10 +23,28 @@ const snap = await snapshot();
 await marketOverview();
 await issuers();
 const topAssets = [...snap.assets].sort((a, b) => b.mcap - a.mcap).slice(0, n);
+// Sequential with a pause: CMC allows ~50 requests/minute (error 1008 when exceeded).
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const failed: string[] = [];
 for (const a of topAssets) {
-  // the exact requests the asset page and the agent's token-detail tool make
-  await Promise.all([assetInfo(a.rwaId), assetHistory(a.rwaId, "daily", 90), assetHistory(a.rwaId, "daily", 30), assetHistory(a.rwaId, "hourly", 168), marketPairs(a.rwaId)]);
+  // the exact requests the asset page and the agent's research step make
+  const calls: [string, () => Promise<unknown>][] = [
+    ["info", () => assetInfo(a.rwaId)],
+    ["history 90d", () => assetHistory(a.rwaId, "daily", 90)],
+    ["history 30d", () => assetHistory(a.rwaId, "daily", 30)],
+    ["history 7d hourly", () => assetHistory(a.rwaId, "hourly", 168)],
+    ["market pairs", () => marketPairs(a.rwaId)],
+  ];
+  for (const [label, fn] of calls) {
+    try {
+      await fn();
+    } catch (err) {
+      failed.push(`${a.symbol} ${label}: ${(err as Error).message}`);
+    }
+    await sleep(1300);
+  }
   console.log(`recorded ${a.symbol}`);
 }
+if (failed.length) console.log(`skipped ${failed.length} request(s):\n  ${failed.join("\n  ")}`);
 const s = cmcStats();
 console.log(`done: ${s.live} live calls, ${s.credits} credits -> fixtures/recorded/`);

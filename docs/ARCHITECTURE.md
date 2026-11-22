@@ -5,7 +5,7 @@ How RWA Lens turns CoinMarketCap data into a screener, a peg monitor and a rule-
 ## Overview
 
 ```
-                 ┌──────────────────────── server/ (Fastify · Node 22 · TypeScript) ─────────────────────────┐
+                 ┌─────────────── server/ (Hono · TypeScript · runs on Node 22 and Cloudflare) ──────────────┐
                  │                                                                                           │
  CMC Pro API ──▶ │  cmc.ts        key stays server-side · TTL cache · evidence log · daily credit budget     │
                  │                mock layer (mock.ts) when no key · fixture recording                      │
@@ -15,10 +15,13 @@ How RWA Lens turns CoinMarketCap data into a screener, a peg monitor and a rule-
                  │  agent/        strategy.ts (decision loop) · tools.ts · journal.ts · run.ts               │
                  │  scheduler.ts  agent on an interval · cheap mark-to-market                                │
                  │  alerts.ts     de-pegs · exits · agent runs (+ Telegram)                                  │
-                 │  routes.ts     REST API                       store.ts  JSON persistence in DATA_DIR     │
+                 │  app.ts        REST API (Hono)                store.ts  JSON docs: files (Node) / D1 (CF)│
                  └───────────────▲─────────────────────────────────────▲─────────────────────────────────────┘
                                  │ /api                                 │ shared tools (agent/tools.ts)
                        web/ (Vite · TS · Chart.js)               mcp/server.ts (MCP over stdio)
+
+ Entry points: server/index.ts (Node: @hono/node-server, file storage, 60s timer)
+               server/worker.ts (Cloudflare Pages _worker.js: D1 storage, traffic- or cron-driven jobs)
 ```
 
 Everything shares one implementation. The web UI, the trading agent and the MCP server all call the same screener and tool functions, and every order goes through the same `placeOrder()` → `riskCheck()` path.
@@ -121,16 +124,35 @@ The UI polls the journal while a run is in progress.
 | Re-pricing quotes held tokens only | `scheduler.ts` |
 | Remembers plan-restricted endpoints (error 1006) and stops calling them | `rwa.ts` |
 
+## Two runtimes, one codebase
+
+All business logic is platform-neutral TypeScript with no Node built-ins. The differences live in two entry points:
+
+| | Node (`server/index.ts`) | Cloudflare Pages (`server/worker.ts` → `_worker.js`) |
+|---|---|---|
+| HTTP | `@hono/node-server`, serves `web/dist` | Pages advanced mode; static files via `env.ASSETS`, `_routes.json` sends only `/api/*` to the worker |
+| Config | `.env` via `node/bootstrap.ts` | env vars and secrets on the Pages project |
+| Storage | JSON files in `DATA_DIR`, written on every change | D1 table `kv(k, v, updated_at)`: load all docs per request (1 query), write back only changed docs (1 batch) |
+| Concurrency | single process | requests serialized per isolate so they don't overwrite each other's state |
+| Scheduler | 60-second `setInterval` | after API requests (UI polls every 15s) via `ctx.waitUntil`, plus `POST /api/cron` for an external cron |
+| Agent run | background; the UI polls the journal | finishes within the request (~2s) so its state is saved |
+| Evidence | D1/JSON store (last 60) + `evidence/cmc-calls.jsonl` | D1 store (last 60) |
+| Mock fixtures | `fixtures/recorded/` replay, else synthetic | synthetic |
+
+`store.ts` gives the business code a synchronous `get/set/update` API either way. `scripts/build-cloudflare.mjs` bundles the worker with esbuild's `neutral` platform, so a stray Node import fails the build instead of failing at runtime.
+
 ## Persistence
 
-Plain JSON files in `DATA_DIR` (default `./data`), written atomically (temp file + rename):
-- `portfolio.json`: cash, positions, orders, equity history
+The same JSON documents exist on both platforms: files in `DATA_DIR` on Node, rows in D1 on Cloudflare. Sizes are capped to keep per-request parsing cheap.
+- `portfolio.json`: cash, positions, the last 500 orders, equity history
 - `settings.json`: agent and risk settings
-- `agent-runs.json`: last 200 runs with journals
-- `alerts.json`
-- `credits.json`: today's credit spend, shared by the app and the MCP server
+- `agent-runs.json`: the last 40 runs with journals
+- `alerts.json`: the last 150 alerts
+- `credits.json`: today's credit spend
+- `evidence.json`: the last 60 live calls (key redacted)
+- `scheduler.json`: last scheduled run and re-price times
 
-The app is the single owner of portfolio state. The MCP server reads and trades through the app's HTTP API instead of writing the file.
+The app is the single owner of portfolio state. The MCP server reads and trades through the app's HTTP API instead of writing the files.
 
 ## Security
 
