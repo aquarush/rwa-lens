@@ -16,7 +16,7 @@ Shorter alternative (if the field is tight):
 
 ## Project overview (long description, Markdown)
 
-Paste everything inside the block into the DoraHacks project description. All links are absolute so they work there. Replace the video link once it's uploaded.
+Paste everything inside the block into the DoraHacks project description. All links are absolute so they work there.
 
 ```markdown
 # RWA Lens
@@ -26,7 +26,6 @@ RWA Lens is a screener, peg monitor and explainable paper-trading agent for toke
 
 🔗 **Live demo:** https://rwalens.pages.dev
 💻 **Source code:** https://github.com/aquarush/rwa-lens
-🎥 **Demo video:** <YOUTUBE_OR_LOOM_LINK>
 📖 **5-minute walkthrough:** https://github.com/aquarush/rwa-lens#demo-walkthrough-5-minutes
 
 ---
@@ -94,7 +93,7 @@ Built from scratch for **Build with CMC: API Hackathon Round 2** (#BuildwithCMC)
 | Field | Value |
 |---|---|
 | GitHub Repo | https://github.com/aquarush/rwa-lens |
-| Video | YouTube / Loom link to the 2-3 min demo (script: `docs/DEMO.md`) |
+| Video | (optional for now; script ready in `docs/DEMO.md` if you record one) |
 | Website | https://rwalens.pages.dev |
 
 ## Logo / cover image prompts
