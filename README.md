@@ -6,7 +6,9 @@
 
 Real World Assets track · CMC API Hackathon Round 2 · #BuildwithCMC
 
-![Node 22](https://img.shields.io/badge/node-22-339933) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6) ![License: MIT](https://img.shields.io/badge/license-MIT-blue) ![Paper trading only](https://img.shields.io/badge/trading-paper%20only-orange)
+**[Live demo → rwalens.pages.dev](https://rwalens.pages.dev)** · **[GitHub](https://github.com/aquarush/rwa-lens)** · **[5-minute walkthrough](#demo-walkthrough-5-minutes)** · **[Connect an AI agent](#connect-ai-agents-mcp)**
+
+[![CI](https://github.com/aquarush/rwa-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/aquarush/rwa-lens/actions/workflows/ci.yml) ![Node 22](https://img.shields.io/badge/node-22-339933) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6) ![License: MIT](https://img.shields.io/badge/license-MIT-blue) ![Paper trading only](https://img.shields.io/badge/trading-paper%20only-orange)
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -77,7 +79,7 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 ### 2. Install
 
 ```bash
-git clone <this repo> rwa-lens
+git clone https://github.com/aquarush/rwa-lens.git
 cd rwa-lens
 npm install          # also installs the secret-guard git hook
 ```
@@ -396,6 +398,8 @@ rwa-lens/
 ## Deploying
 
 ### Cloudflare Pages (recommended, free tier)
+
+Live instance: **https://rwalens.pages.dev**
 
 ```bash
 npm run build:cf     # → rwa-lens-cloudflare-pages.zip
