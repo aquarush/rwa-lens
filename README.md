@@ -418,6 +418,7 @@ The API runs as an advanced-mode `_worker.js`: the same Hono app as the Node ser
 - [API feedback](docs/API_FEEDBACK.md): what the CMC API made possible and where it got in the way
 - [Deploy to Cloudflare Pages](docs/DEPLOY_CLOUDFLARE.md): zip upload, D1, secrets, cron
 - [Demo script](docs/DEMO.md): video walkthrough and submission checklist
+- [Submission kit](docs/SUBMISSION.md): DoraHacks description, tags, logo prompts
 
 ## License
 
