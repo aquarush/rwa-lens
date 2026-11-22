@@ -28,7 +28,8 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 
 - [Screenshots](#screenshots)
 - [Features](#features)
-- [Quick start](#quick-start)
+- [Run it locally](#run-it-locally)
+- [Demo walkthrough (5 minutes)](#demo-walkthrough-5-minutes)
 - [CoinMarketCap endpoints used](#coinmarketcap-endpoints-used)
 - [The trading agent](#the-trading-agent)
 - [MCP server (optional)](#mcp-server-optional)
@@ -63,19 +64,84 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 
 **Signals:** `DISCOUNT` · `PREMIUM` · `MOMENTUM_UP` · `MOMENTUM_DOWN` · `REBOUND` · `ILLIQUID` · `UNIT_MISMATCH` · `LEVERAGED`. The rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#signals-and-score).
 
-## Quick start
+## Run it locally
 
-Requires Node 22+.
+### 1. Prerequisites
+
+- **Node.js 22+** (`node -v`). Get it from [nodejs.org](https://nodejs.org) or `nvm install 22`; the repo includes `.nvmrc`.
+- **Git.**
+- **A CoinMarketCap API key** (optional). Get one free at [coinmarketcap.com/api](https://coinmarketcap.com/api). Without a key the app runs in mock mode.
+
+### 2. Install
 
 ```bash
-git clone <this repo> && cd rwa-lens
-npm install
-cp .env.example .env     # add your CMC_API_KEY
-npm run build            # build the web UI
-npm start                # → http://localhost:8787
+git clone <this repo> rwa-lens
+cd rwa-lens
+npm install          # also installs the secret-guard git hook
 ```
 
-**No key? It still runs.** No `CMC_API_KEY` means **mock mode**. It replays a real market snapshot from `fixtures/recorded/` (create one with `npm run record`), or falls back to a clearly labelled synthetic market in the documented response shapes.
+### 3. Add your key
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and set `CMC_API_KEY=your-key`. That's the only required setting. `.env` is gitignored, and the secret guard stops you from committing it by accident.
+
+### 4. Build and start
+
+```bash
+npm run build        # builds the web UI into web/dist
+npm start
+```
+
+You should see:
+
+```
+RWA Lens on http://localhost:8787
+  CMC data: LIVE
+  Agent: rule-based strategy on CMC data (no external AI service)
+  Paper trading only: no real orders are ever sent.
+```
+
+Open **http://localhost:8787**. The sidebar shows the data mode (green = live, amber = mock) and today's credit usage.
+
+### 5. (Optional) Development mode
+
+```bash
+npm run dev          # API with hot reload on :8787 + UI dev server on http://localhost:5173
+```
+
+### No key? It still runs
+
+With no `CMC_API_KEY`, the app runs in **mock mode** and shows a banner saying so:
+- If you've recorded a snapshot (`npm run record`, which needs a key once), it replays those real CMC responses.
+- Otherwise it generates a clearly labelled synthetic market in CMC's documented response shapes.
+
+Everything works in mock mode, including the agent, trading and the MCP server.
+
+## Demo walkthrough (5 minutes)
+
+A guided tour once the app is running. Each step names the CMC endpoints behind it.
+
+1. **Dashboard** (`#/`). Market cards: tokenized RWA market cap and its share of the whole crypto market (`/v5/real-world-assets/assets/list` + `/v1/global-metrics/quotes/latest`), and how many liquid tokens are ≥ 1% away from their peers. Below: equity curve, market cap by asset type, biggest moves vs peers, top movers.
+2. **Screener** (`#/screener`). Type `NVDA` in search: you'll see every issuer's NVIDIA token (xStocks, Ondo, bStocks, Robinhood…). The **vs peers** column shows which is cheapest. Try *Signal → discount* plus *Liquid only*, and click any column header to sort. Data: `/v5/real-world-assets/quotes/latest` (tokens per asset) + `/v2/cryptocurrency/quotes/latest` (momentum).
+3. **Asset detail** (click a row). 90-day price and volume history (`/v5/real-world-assets/quotes/historical`; toggle *7 days hourly*), and every token tracking the asset with its signals. Look for `UNIT_MISMATCH`: tokens CMC quotes in a different unit (gold per gram vs per ounce), which a naive screener would call a 90% de-peg.
+4. **Agent** (`#/agent`). Click **Run agent now**. In about 2 seconds a run appears with its journal:
+   - *Market regime*, read from global metrics;
+   - *Screened 263 tokens → N candidates*, with counts of why the rest were filtered out;
+   - one *BUY …: pending* order per pick, each with its reason: signal, score, 24h/7d change, vs peers, 30-day return, volatility and drawdown, and the volatility-targeted size.
+
+   Autopilot is off, so the orders wait in **Waiting for your approval**. Approve one, or **Approve all**.
+5. **Portfolio** (`#/portfolio`). The approved order is filled: fill price with slippage, 10 bps fee, position value and P&L. Use **Sell** on a row, or **Trade** from the screener, to trade manually through the same risk engine.
+6. **Try the risk engine.** On the Agent page, set *Max position* to `5` and save, then try buying $20,000 of something from the screener. It's rejected, with the reason. Turn on the **Kill switch** and every new order is blocked.
+7. **Strategy styles.** Switch *Strategy style* to *momentum* or *value*, save, and run again. The journal shows different signals being searched for.
+8. **Issuers** (`#/issuers`). Issuer scorecard: market cap, turnover, and *peg tightness* (how closely each issuer's tokens track their peers).
+9. **Alerts** (`#/alerts`). De-pegs found while screening, fills, agent runs, and stop-loss/take-profit exits.
+10. **API Evidence** (`#/evidence`). Every live CMC call: endpoint, params, HTTP status, credits and timing, with the key redacted. Expand one to see the response.
+11. **Run it on a schedule.** On the Agent page, tick *Run on a schedule*, pick an interval and save. Positions are also re-priced every 10 minutes, and stop-loss/take-profit fire automatically.
+
+Want an AI assistant to drive it? See [Connect AI agents](#connect-ai-agents-mcp).
 
 | Script | |
 |---|---|
@@ -84,6 +150,7 @@ npm start                # → http://localhost:8787
 | `npm test` | 12 tests: peer pricing, unit mismatch, risk engine, fills, approvals, stop-loss, kill switch, agent regime and sizing, Cloudflare persistence, mock shapes. They use a temp data dir and spend no credits |
 | `npm run typecheck` | `tsc --noEmit` across server, web, MCP and tests |
 | `npm run mcp` | Run the MCP server on stdio |
+| `npm run mcp:check` | Smoke-test the MCP server like an AI client would (handshake, list tools, call one) |
 | `npm run record [n]` | Record real responses for the top *n* assets into `fixtures/recorded/` so mock mode replays real data (~57 credits for n = 10) |
 | `npm run build:cf` | Build for Cloudflare Pages: `dist-cf/` and `rwa-lens-cloudflare-pages.zip` |
 | `npm run cf:dev` / `npm run cf:deploy` | Run the Cloudflare build locally (Wrangler + local D1) / deploy it with Wrangler |
