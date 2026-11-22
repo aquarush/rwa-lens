@@ -26,7 +26,7 @@ npm run build:cf          # → dist-cf/ and rwa-lens-cloudflare-pages.zip
    | `CMC_API_KEY` | your CoinMarketCap key. Leave it unset to run on mock data |
    | `ADMIN_TOKEN` | any long random string. **Required on a public URL**, otherwise visitors can trade, run the agent and spend your credits |
 
-   Optional plain variables: `CMC_DAILY_CREDIT_BUDGET` (default 600), `PAPER_STARTING_CASH`, `MTM_INTERVAL_MIN`, `DEPEG_ALERT_PCT`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+   Optional plain variables: `CMC_DAILY_CREDIT_BUDGET` (default 600; **set it to about 300 once the hackathon closes**, because keys revert to the free Basic tier at roughly 10k credits a month), `PAPER_STARTING_CASH`, `MTM_INTERVAL_MIN`, `DEPEG_ALERT_PCT`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 4. **Bind the database.** Go to *Settings → Bindings → Add → D1 database*, set the variable name to **`DB`**, and select `rwa-lens`.
 5. **Redeploy.** Bindings and secrets only apply to deployments made after they're set. Go to *Deployments → Create deployment* and upload the same zip again.
 6. Open `https://<project>.pages.dev`. On the **Agent** page, paste your `ADMIN_TOKEN` once; it's saved in your browser and sent with every action.

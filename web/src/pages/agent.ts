@@ -17,7 +17,7 @@ export async function renderAgent(app: HTMLElement, token: number, runId?: strin
   const intro = `A rule-based agent that decides from CoinMarketCap data alone, with no external AI service. Each run it reads the market regime, reviews open positions, screens the tokenized-RWA universe, researches each shortlisted asset's 30-day history, then sizes orders by volatility. Current style: <b>${esc(settings.strategy)}</b> (${STYLE[settings.strategy] ?? ""}). Every order passes the risk limits below.`;
 
   app.innerHTML = `
-    <div class="spread"><div><h1>Trading agent</h1><p class="sub">${intro}</p></div>
+    <div class="spread"><div><h1>Trading agent</h1><p class="sub">${intro}</p><p class="small muted">Experimental hackathon project, simulated trades only. Nothing here is financial advice; don't rely on it for real investment decisions.</p></div>
       <div class="row"><button class="primary" id="run" ${status?.agentRunning ? "disabled" : ""}>${status?.agentRunning ? "Running…" : "Run agent now"}</button></div></div>
     ${status?.adminRequired ? `<div class="banner">This deployment requires an admin token for actions. <input id="tok" placeholder="admin token" value="${esc(adminToken.get())}" style="margin-left:8px"/> <button class="sm" id="savetok">Save</button></div>` : ""}
 

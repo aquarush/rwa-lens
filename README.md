@@ -22,7 +22,7 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 2. **What's moving, and can I actually trade it?** Token-level momentum, liquidity and turnover, and a 0-100 score.
 3. **Can it trade on its own?** A rule-based agent that decides from CoinMarketCap data alone (no external AI service) reads the market, researches candidates and trades a **paper** portfolio. Risk limits are enforced in code, every decision is explained in a journal, and there's an approval queue.
 
-> **Paper trading only.** No real orders are ever sent anywhere. Fills are simulated at live CMC prices with fees and size-based slippage.
+> **Paper trading only, not financial advice.** No real orders are ever sent anywhere; fills are simulated at live CMC prices with fees and size-based slippage. This is an experimental hackathon project, not audited, and nothing it shows (scores, signals, agent decisions) is financial, investment, legal or tax advice. Don't rely on it for real financial decisions.
 
 ## Contents
 

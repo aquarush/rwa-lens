@@ -29,4 +29,5 @@ A walkthrough for the hackathon video. Start the app with live keys, reset the p
 - [ ] README names the endpoints and includes a sample request and response
 - [ ] `docs/API_FEEDBACK.md`
 - [ ] X post with the DoraHacks link, video and #BuildwithCMC; paste the URL in the form
-- [ ] Track: Real World Assets
+- [ ] Track: Real World Assets (crowded: Parallax, WrapWise and Signal Desk also compare issuer tokens) or Markets and Trading Tools. Lead the pitch with the agent, risk engine, journal and CMC data-quality findings
+- [ ] After submissions close: set `CMC_DAILY_CREDIT_BUDGET=300` on the deployment (keys revert to the Basic tier)

@@ -35,7 +35,7 @@ async function refreshStatus() {
       <div><span class="dot ${status.mode}"></span> CMC ${status.mode === "live" ? "live data" : "mock data"}</div>
       <div>Agent: ${status.strategy} strategy${status.agentRunning ? " · running…" : ""}</div>
       <div>Credits today: ${b.used}/${b.limit}</div>
-      <div>Paper trading only</div>
+      <div>Paper trading only · not financial advice</div>
       ${status.persistent ? "" : `<div class="down">Storage not persistent</div>`}`;
   } catch {
     document.getElementById("status-pill")!.innerHTML = `<div class="down">API offline</div>`;
