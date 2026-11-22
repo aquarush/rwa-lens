@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RWA Lens</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='14' cy='14' r='9' fill='none' stroke='%232a78d6' stroke-width='4'/><path d='M21 21l7 7' stroke='%232a78d6' stroke-width='4' stroke-linecap='round'/></svg>" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="nav">
+        <a class="brand" href="#/"><span class="logo">◎</span> RWA Lens</a>
+        <nav>
+          <a href="#/" data-route="">Dashboard</a>
+          <a href="#/screener" data-route="screener">Screener</a>
+          <a href="#/agent" data-route="agent">AI Agent</a>
+          <a href="#/portfolio" data-route="portfolio">Portfolio</a>
+          <a href="#/issuers" data-route="issuers">Issuers</a>
+          <a href="#/alerts" data-route="alerts">Alerts</a>
+          <a href="#/evidence" data-route="evidence">API Evidence</a>
+        </nav>
+        <div class="nav-foot" id="status-pill"></div>
+      </aside>
+      <main id="app"></main>
+    </div>
+    <div id="modal-root"></div>
+    <div id="toast-root"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
