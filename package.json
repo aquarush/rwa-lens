@@ -20,7 +20,8 @@
     "check:secrets": "node scripts/check-secrets.mjs",
     "build:cf": "vite build && node scripts/build-cloudflare.mjs",
     "cf:dev": "wrangler pages dev dist-cf --d1 DB --port 8788",
-    "cf:deploy": "wrangler pages deploy dist-cf"
+    "cf:deploy": "wrangler pages deploy dist-cf",
+    "mcp:check": "node scripts/mcp-check.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.11",
