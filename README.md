@@ -34,6 +34,8 @@ RWA Lens uses CoinMarketCap's new `/v5/real-world-assets` endpoints, together wi
 - [The trading agent](#the-trading-agent)
 - [Connect AI agents (MCP)](#connect-ai-agents-mcp)
 - [Configuration](#configuration)
+- [REST API](#rest-api)
+- [Troubleshooting](#troubleshooting)
 - [Project structure](#project-structure)
 - [Deploying (Cloudflare Pages or Node)](#deploying)
 - [Docs](#docs)
@@ -320,6 +322,49 @@ All settings go in `.env` (see [`.env.example`](.env.example)). Agent and risk s
 - The CMC key is only ever sent from the server as a request header. The browser never sees it, and the evidence log writes `<redacted>`.
 - **Secret guard** (`scripts/check-secrets.mjs`) blocks any commit that stages a `.env` file, contains the value of a `*_KEY` / `*_TOKEN` / `*_SECRET` from your local `.env`, or contains a key-shaped string (Anthropic, CMC, Telegram, private keys). `npm install` installs it as a pre-commit hook automatically (`core.hooksPath=.githooks`), and CI runs it on every push. Run it by hand with `npm run check:secrets`.
 - On public deploys, set `ADMIN_TOKEN` so visitors can't spend your credits.
+
+## REST API
+
+The web UI is a thin client over this API, so you can script it too. Writes need the `x-admin-token` header when `ADMIN_TOKEN` is set.
+
+| Method & path | |
+|---|---|
+| `GET /api/status` | Data mode, platform, credit budget, scheduler, recent CMC calls |
+| `GET /api/overview` | Market overview (RWA market cap, share of crypto, by type, movers, deviations) |
+| `GET /api/screener?q=&assetType=&signal=&minVol=&tradableOnly=&sort=&dir=&limit=` | Scored token rows |
+| `GET /api/assets/:rwaId?interval=daily\|hourly&count=` | Asset info, history, tokens, market pairs |
+| `GET /api/issuers` | Issuer scorecard |
+| `GET /api/portfolio` · `/api/orders` · `/api/equity` | Paper portfolio, order history, equity curve |
+| `POST /api/orders` `{cryptoId, side, usd?, fraction?, reason?}` | Manual paper order |
+| `POST /api/orders/:id/approve` · `/cancel` | Approve or reject an agent proposal |
+| `POST /api/portfolio/refresh` · `/reset` | Re-price positions now · reset the portfolio |
+| `GET /api/settings` · `PUT /api/settings` | Agent and risk settings |
+| `POST /api/agent/run` · `GET /api/agent/runs[/:id]` | Run the agent · run list and journals |
+| `POST /api/cron` | Run whatever scheduled job is due (for platforms without timers) |
+| `GET /api/alerts` · `/api/evidence` · `/api/key-info` | Alerts, evidence log, CMC credit usage |
+
+```bash
+curl -s localhost:8787/api/screener?signal=DISCOUNT\&tradableOnly=true\&limit=5
+curl -s -X POST localhost:8787/api/agent/run
+```
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Sidebar says **CMC mock data** | `CMC_API_KEY` is missing or empty in `.env`. Restart after editing |
+| `Daily CMC credit budget (600) exhausted` | The app is protecting your credits and serving cached data. Raise `CMC_DAILY_CREDIT_BUDGET` or wait for the UTC day to roll over |
+| `HTTP 429` / error `1008` from CMC | You hit CMC's per-minute rate limit. Wait a minute; cached data keeps the UI working |
+| Asset page: *Market pairs are not included in this CMC API plan* | Expected on some plans (CMC returns 403 / error 1006). Everything else works |
+| `EADDRINUSE :8787` | Something else uses the port. `PORT=8800 npm start` |
+| Opening :8787 shows "API is running… build the UI" | Run `npm run build` first, or use `npm run dev` and open :5173 |
+| **Agent run proposes nothing** | It only trades when its rules are met. The journal says why: e.g. *62 score < 55*, *98 illiquid*. Lower *Min score* or switch the strategy style |
+| Orders rejected | The reason is shown (position limit, cash floor, premium, leveraged, kill switch…). Adjust the risk limits on the Agent page |
+| **401 admin token required** | `ADMIN_TOKEN` is set. Paste it on the Agent page (saved in your browser), or send `x-admin-token` |
+| AI client doesn't show the RWA Lens tools | Run `npm run mcp:check`. Use **absolute** paths in the client config, then fully restart the client |
+| `portfolio_get` says the app isn't reachable | Start the app (`npm start`), or set `RWA_LENS_URL` in the MCP server's `env` |
+| Commit blocked by **secret guard** | It found a key or a `.env` file in the commit. Remove it; keys belong only in `.env` / `.dev.vars` |
+| Cloudflare: banner says storage is not persistent | Bind a D1 database as `DB` and redeploy. See [docs/DEPLOY_CLOUDFLARE.md](docs/DEPLOY_CLOUDFLARE.md) |
 
 ## Project structure
 
