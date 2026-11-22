@@ -2,16 +2,16 @@ import { isCurrent } from "../main";
 import { ago, api, chips, esc, pct, scoreCell, typeLabel, usd } from "../lib";
 import { openTrade } from "../trade";
 
-const COLS: { key: string; label: string; num?: boolean }[] = [
+const COLS: { key: string; label: string; num?: boolean; sm?: boolean }[] = [
   { key: "symbol", label: "Token" },
-  { key: "assetSymbol", label: "Asset" },
-  { key: "issuerName", label: "Issuer" },
+  { sm: true, key: "assetSymbol", label: "Asset" },
+  { sm: true, key: "issuerName", label: "Issuer" },
   { key: "price", label: "Price", num: true },
   { key: "premiumPct", label: "vs peers", num: true },
   { key: "change24h", label: "24h", num: true },
-  { key: "change7d", label: "7d", num: true },
-  { key: "mcap", label: "Mkt cap", num: true },
-  { key: "vol24h", label: "24h vol", num: true },
+  { sm: true, key: "change7d", label: "7d", num: true },
+  { sm: true, key: "mcap", label: "Mkt cap", num: true },
+  { sm: true, key: "vol24h", label: "24h vol", num: true },
   { key: "score", label: "Score", num: true },
 ];
 
@@ -51,19 +51,19 @@ export async function renderScreener(app: HTMLElement, token: number, params: UR
       tbl.innerHTML = `<div class="empty">No tokens match these filters.</div>`;
       return;
     }
-    tbl.innerHTML = `<table><thead><tr>${COLS.map((c) => `<th class="sortable ${c.num ? "num" : ""}" data-k="${c.key}">${c.label}${state.sort === c.key ? (state.dir === "asc" ? " ↑" : " ↓") : ""}</th>`).join("")}<th>Signals</th><th></th></tr></thead><tbody>
+    tbl.innerHTML = `<table><thead><tr>${COLS.map((c) => `<th class="sortable ${c.num ? "num" : ""} ${c.sm ? "hide-sm" : ""}" data-k="${c.key}">${c.label}${state.sort === c.key ? (state.dir === "asc" ? " ↑" : " ↓") : ""}</th>`).join("")}<th class="hide-sm">Signals</th><th></th></tr></thead><tbody>
       ${data.rows.map((r: any, i: number) => `<tr class="clickable" data-rwa="${r.rwaId}">
         <td><span class="sym">${esc(r.symbol)}</span><div class="small muted">${esc(r.name)}</div></td>
-        <td>${esc(r.assetSymbol)}<div class="small muted">${typeLabel(r.assetType)}</div></td>
-        <td class="small">${esc(r.issuerName)}</td>
+        <td class="hide-sm">${esc(r.assetSymbol)}<div class="small muted">${typeLabel(r.assetType)}</div></td>
+        <td class="small hide-sm">${esc(r.issuerName)}</td>
         <td class="num">${usd(r.price)}</td>
         <td class="num">${r.premiumPct == null ? `<span class="muted" title="${r.signals.includes("UNIT_MISMATCH") ? "different unit from its siblings" : "no comparable sibling"}">n/a</span>` : pct(r.premiumPct)}</td>
         <td class="num">${pct(r.change24h)}</td>
-        <td class="num">${pct(r.change7d)}</td>
-        <td class="num">${usd(r.mcap, { compact: true })}</td>
-        <td class="num">${usd(r.vol24h, { compact: true })}</td>
+        <td class="num hide-sm">${pct(r.change7d)}</td>
+        <td class="num hide-sm">${usd(r.mcap, { compact: true })}</td>
+        <td class="num hide-sm">${usd(r.vol24h, { compact: true })}</td>
         <td class="num">${scoreCell(r.score)}</td>
-        <td>${chips(r.signals)}</td>
+        <td class="hide-sm">${chips(r.signals)}</td>
         <td><button class="sm" data-trade="${i}">Trade</button></td>
       </tr>`).join("")}
     </tbody></table>`;

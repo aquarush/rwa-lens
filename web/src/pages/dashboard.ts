@@ -20,7 +20,7 @@ export async function renderDashboard(app: HTMLElement, token: number) {
     <div class="tiles">
       <div class="card tile"><div class="label">Tokenized RWA market cap <span class="muted">(top ${ov.rwa.assets} assets)</span></div><div class="value">${usd(ov.rwa.tokenizedMcap, { compact: true })}</div><div class="delta muted">${usd(ov.rwa.vol24h, { compact: true })} 24h volume</div></div>
       <div class="card tile"><div class="label">RWA share of crypto market</div><div class="value">${ov.rwaSharePct?.toFixed(3) ?? "—"}%</div><div class="delta muted">of ${usd(ov.crypto.totalMcap, { compact: true })} total</div></div>
-      <div class="card tile"><div class="label">Total crypto market cap, 24h</div><div class="value">${pct(ov.crypto.totalMcapChange24h)}</div><div class="delta muted">BTC dominance ${ov.crypto.btcDominance?.toFixed(1)}%</div></div>
+      <div class="card tile"><div class="label">Crypto market cap, 24h change</div><div class="value">${pct(ov.crypto.totalMcapChange24h)}</div><div class="delta muted">BTC dominance ${ov.crypto.btcDominance?.toFixed(1)}%</div></div>
       <div class="card tile"><div class="label">Tokens off-peg ≥1%</div><div class="value">${ov.depegCount}</div><div class="delta muted">of ${ov.rwa.tradableTokens} liquid tokens</div></div>
       <div class="card tile"><div class="label">Paper portfolio equity</div><div class="value">${usd(pf.equity, { dp: 0 })}</div><div class="delta">${signedUsd(pf.totalPnl)} (${pct(pf.totalPnlPct)})</div></div>
     </div>

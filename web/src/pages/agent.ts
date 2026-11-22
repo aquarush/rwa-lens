@@ -19,13 +19,13 @@ export async function renderAgent(app: HTMLElement, token: number, runId?: strin
     ${status?.adminRequired ? `<div class="banner">This deployment requires an admin token for actions. <input id="tok" placeholder="admin token" value="${esc(adminToken.get())}" style="margin-left:8px"/> <button class="sm" id="savetok">Save</button></div>` : ""}
 
     ${pf.pending.length ? `<div class="card" style="margin-bottom:16px"><h2>Waiting for your approval (${pf.pending.length})</h2>
-      <div class="table-wrap"><table><thead><tr><th>Side</th><th>Token</th><th class="num">Amount</th><th>Agent's reason</th><th>Proposed</th><th></th></tr></thead><tbody>
-      ${pf.pending.map((o: any) => `<tr><td><b>${o.side.toUpperCase()}</b></td><td class="sym">${esc(o.symbol)}</td><td class="num">${o.side === "buy" ? usd(o.requestedUsd, { dp: 0 }) : o.requestedQty ? "partial" : "close"}</td><td class="small">${esc(o.reason)}</td><td class="small muted">${ago(o.at)}</td>
+      <div class="table-wrap"><table><thead><tr><th>Side</th><th>Token</th><th class="num">Amount</th><th>Agent's reason</th><th class="hide-sm">Proposed</th><th></th></tr></thead><tbody>
+      ${pf.pending.map((o: any) => `<tr><td><b>${o.side.toUpperCase()}</b></td><td class="sym">${esc(o.symbol)}</td><td class="num">${o.side === "buy" ? usd(o.requestedUsd, { dp: 0 }) : o.requestedQty ? "partial" : "close"}</td><td class="small">${esc(o.reason)}</td><td class="small muted hide-sm">${ago(o.at)}</td>
         <td class="row" style="flex-wrap:nowrap"><button class="sm primary" data-approve="${o.id}">Approve</button><button class="sm" data-cancel="${o.id}">Reject</button></td></tr>`).join("")}
       </tbody></table></div>
       <div class="row" style="margin-top:10px"><button class="sm" id="approve-all">Approve all</button></div></div>` : ""}
 
-    <div class="grid" style="grid-template-columns: 300px minmax(0,1fr)">
+    <div class="grid runs-layout">
       <div class="card"><h2>Runs</h2><div id="runs">${runs.length ? runs.map((r) => `
         <div class="run-item ${r.id === selected ? "active" : ""}" data-run="${r.id}">
           <div class="spread"><b>${r.engine === "claude" ? "Claude" : "Rules"}</b><span class="small muted">${ago(r.startedAt)}</span></div>

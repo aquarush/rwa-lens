@@ -50,6 +50,8 @@ async function route() {
   const [path, query] = location.hash.replace(/^#\/?/, "").split("?");
   const parts = path.split("/").filter(Boolean);
   document.querySelectorAll<HTMLAnchorElement>(".nav nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === (parts[0] ?? "")));
+  const titles: Record<string, string> = { screener: "Screener", asset: "Asset", agent: "AI Agent", portfolio: "Portfolio", issuers: "Issuers", alerts: "Alerts", evidence: "API Evidence" };
+  document.title = parts[0] && titles[parts[0]] ? `${titles[parts[0]]} · RWA Lens` : "RWA Lens";
   app.innerHTML = `<div class="spinner">Loading…</div>`;
   window.scrollTo(0, 0);
   const params = new URLSearchParams(query ?? "");

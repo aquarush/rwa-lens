@@ -62,9 +62,21 @@ export function toast(msg: string, err = false) {
 export function modal(html: string, onMount: (root: HTMLElement, close: () => void) => void) {
   const root = document.getElementById("modal-root")!;
   root.innerHTML = `<div class="modal-backdrop"><div class="modal">${html}</div></div>`;
-  const close = () => (root.innerHTML = "");
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") close();
+    if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") root.querySelector<HTMLButtonElement>(".modal button.primary")?.click();
+  };
+  const close = () => {
+    root.innerHTML = "";
+    document.removeEventListener("keydown", onKey);
+  };
+  document.addEventListener("keydown", onKey);
   root.querySelector(".modal-backdrop")!.addEventListener("click", (e) => { if (e.target === e.currentTarget) close(); });
-  onMount(root.querySelector(".modal")!, close);
+  const box = root.querySelector<HTMLElement>(".modal")!;
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-modal", "true");
+  onMount(box, close);
+  box.querySelector<HTMLElement>("input, select, button.primary")?.focus();
 }
 
 // ---------- charts ----------
