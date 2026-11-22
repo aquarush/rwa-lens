@@ -15,7 +15,9 @@
     "mcp": "tsx mcp/server.ts",
     "record": "tsx scripts/record-fixtures.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "check:secrets": "node scripts/check-secrets.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",

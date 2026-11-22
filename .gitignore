@@ -8,3 +8,9 @@ dist/
 data/
 evidence/*.jsonl
 web/dist/
+
+# secrets: keys live only in .env (never committed; enforced by scripts/check-secrets.mjs)
+.env*.local
+*.pem
+*.key
+.claude/settings.local.json

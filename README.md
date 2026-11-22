@@ -184,6 +184,13 @@ All settings go in `.env` (see [`.env.example`](.env.example)). Agent and risk s
 | `DATA_DIR` | `./data` | Portfolio, settings, journal, alerts (JSON) |
 | `PORT` | `8787` | |
 
+### Keeping keys safe
+
+- Keys live only in `.env`, which is gitignored. `.env.example` holds empty placeholders.
+- The CMC key is only ever sent from the server as a request header. The browser never sees it, and the evidence log writes `<redacted>`.
+- **Secret guard** (`scripts/check-secrets.mjs`) blocks any commit that stages a `.env` file, contains the value of a `*_KEY` / `*_TOKEN` / `*_SECRET` from your local `.env`, or contains a key-shaped string (Anthropic, CMC, Telegram, private keys). `npm install` installs it as a pre-commit hook automatically (`core.hooksPath=.githooks`), and CI runs it on every push. Run it by hand with `npm run check:secrets`.
+- On public deploys, set `ADMIN_TOKEN` so visitors can't spend your credits.
+
 ## Project structure
 
 ```
@@ -203,7 +210,8 @@ rwa-lens/
 ├── web/                    Vite + TypeScript + Chart.js single-page app
 │   └── src/pages/          dashboard · screener · asset · agent · portfolio · issuers · alerts/evidence
 ├── mcp/server.ts           MCP server (stdio)
-├── scripts/record-fixtures.ts
+├── scripts/               record-fixtures.ts · check-secrets.mjs (secret guard)
+├── .githooks/pre-commit    runs the secret guard on every commit
 ├── test/core.test.ts       node:test suite
 └── docs/                   architecture, API feedback, demo script, screenshots, evidence sample
 ```

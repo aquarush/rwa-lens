@@ -15,6 +15,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # fail the build if any tracked file contains a key or a .env file
+      - run: npm run check:secrets
       - run: npm run typecheck
       # tests force mock mode and a temp data dir: no API keys or credits needed
       - run: npm test
